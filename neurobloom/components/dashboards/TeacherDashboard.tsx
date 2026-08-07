@@ -4,12 +4,14 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Users, Plus, X, Copy, Check, Trash2, FileText,
-  Send, RefreshCw, LogOut, ChevronDown, ChevronUp,
+  Send, RefreshCw, ChevronDown, ChevronUp,
   BookOpen, Brain, Zap, Ear, MessageSquare, PenTool,
   Calculator, ClipboardList, Link2, AlertCircle
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/context/AuthContext";
+import { useTranslation } from "@/hooks/useTranslation";
+import { parseConditions } from "@/lib/conditions";
 
 interface Student {
   id: string;
@@ -20,6 +22,7 @@ interface Student {
   assessment_status: "not_started" | "in_progress" | "completed";
   assessment_id?: string;
   report_url?: string;
+  detected_disabilities?: string;
   parent_name?: string;
   parent_email?: string;
   latest_referral_code?: string;
@@ -35,16 +38,6 @@ interface Note {
   author_name: string;
   created_at: string;
 }
-
-const ASSESSMENT_TYPES = [
-  { value: "dyslexia", label: "Dyslexia", icon: "📖", color: "bg-[#7C6FF7]" },
-  { value: "dyscalculia", label: "Dyscalculia", icon: "🔢", color: "bg-[#2E7D32]" },
-  { value: "dysgraphia", label: "Dysgraphia", icon: "✏️", color: "bg-[#7C6FF7]" },
-  { value: "adhd", label: "ADHD", icon: "⚡", color: "bg-[#F44336]" },
-  { value: "asd", label: "Autism (ASD)", icon: "🧩", color: "bg-[#FF9800]" },
-  { value: "speech", label: "Speech", icon: "🗣️", color: "bg-[#9C27B0]" },
-  { value: "hearing", label: "Hearing", icon: "👂", color: "bg-[#00BCD4]" },
-];
 
 const STATUS_STYLES = {
   not_started: { label: "Not Started", cls: "bg-gray-100 text-black border-black" },
@@ -62,7 +55,12 @@ function Overlay({ onClose }: { onClose: () => void }) {
 }
 
 export default function TeacherDashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const { t } = useTranslation();
+  const statusLabel = (s: string) =>
+    t(`status_${s}`) === `status_${s}` ? s.replace("_", " ") : t(`status_${s}`);
+  const roleLabel = (r: string) =>
+    t(`role_${r}`) === `role_${r}` ? r.replace("_", " ") : t(`role_${r}`);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -75,7 +73,6 @@ export default function TeacherDashboard() {
 
   // Assign modal
   const [assigningStudent, setAssigningStudent] = useState<Student | null>(null);
-  const [assignType, setAssignType] = useState("");
   const [assignLoading, setAssignLoading] = useState(false);
   const [assignResult, setAssignResult] = useState<{ referralLink: string; emailSent: boolean; emailWarning?: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -99,7 +96,7 @@ export default function TeacherDashboard() {
     setError("");
     try {
       const res = await fetch("/api/teacher/students");
-      if (!res.ok) throw new Error("Failed to load students");
+      if (!res.ok) throw new Error(t("td_err_load_students"));
       const data = await res.json();
       setStudents(data);
       setLastUpdated(new Date());
@@ -132,7 +129,7 @@ export default function TeacherDashboard() {
     e.preventDefault();
     setAddError("");
     if (!addForm.name.trim() || !addForm.email.trim()) {
-      setAddError("Name and email are required");
+      setAddError(t("td_err_name_email_required"));
       return;
     }
     setAddLoading(true);
@@ -143,26 +140,26 @@ export default function TeacherDashboard() {
         body: JSON.stringify(addForm),
       });
       const data = await res.json();
-      if (!res.ok) { setAddError(data.error || "Failed to add student"); return; }
+      if (!res.ok) { setAddError(data.error || t("td_err_add_failed")); return; }
       setAddForm({ name: "", email: "", phone: "" });
       setShowAdd(false);
       fetchStudents();
-    } catch { setAddError("Something went wrong"); }
+    } catch { setAddError(t("td_err_generic")); }
     finally { setAddLoading(false); }
   };
 
   const handleAssign = async () => {
-    if (!assigningStudent || !assignType) return;
+    if (!assigningStudent) return;
     setAssignLoading(true);
     setAssignResult(null);
     try {
       const res = await fetch(`/api/teacher/students/${assigningStudent.id}/assign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assessmentType: assignType }),
+        body: JSON.stringify({}),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to assign");
+      if (!res.ok) throw new Error(data.error || t("td_err_assign_failed"));
       setAssignResult({ referralLink: data.referralLink, emailSent: data.emailSent, emailWarning: data.emailWarning });
       fetchStudents();
     } catch (e: any) {
@@ -171,7 +168,7 @@ export default function TeacherDashboard() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Remove ${name} from your class? This cannot be undone.`)) return;
+    if (!confirm(`${t("td_remove_pre")} ${name} ${t("td_remove_post")}`)) return;
     setDeletingId(id);
     try {
       await fetch(`/api/teacher/students/${id}`, { method: "DELETE" });
@@ -216,19 +213,19 @@ export default function TeacherDashboard() {
         <div className="px-6 sm:px-8 pt-8 pb-4 bg-background border-b-4 border-black flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-black text-black uppercase italic tracking-tighter">
-              My <span className="text-primary">Class</span>
+              {t("td_my")} <span className="text-primary">{t("td_class")}</span>
             </h1>
             <p className="text-xs font-black text-black/40 mt-1 uppercase tracking-widest">
-              Teacher Portal · {user?.name}
+              {t("td_teacher_portal")} · {user?.name}
             </p>
             <div className="flex items-center gap-2 mt-1">
               {isPolling
                 ? <RefreshCw size={9} className="animate-spin text-primary" />
                 : <span className="w-2 h-2 rounded-full bg-[#43B047] inline-block" />}
               <span className="text-[9px] font-black uppercase tracking-widest text-black/30">
-                {isPolling ? "Refreshing…" : lastUpdated
-                  ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                  : "Live Status"}
+                {isPolling ? t("td_refreshing") : lastUpdated
+                  ? `${t("td_updated")} ${lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                  : t("td_live_status")}
               </span>
             </div>
           </div>
@@ -238,14 +235,9 @@ export default function TeacherDashboard() {
               onClick={() => { setShowAdd(true); setAddError(""); }}
               className="flex items-center gap-2 px-4 py-3 bg-primary text-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all"
             >
-              <Plus size={16} /> Add Student
+              <Plus size={16} /> {t("td_add_student")}
             </motion.button>
-            <button
-              onClick={logout}
-              className="flex items-center gap-2 px-3 py-3 bg-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-50 transition-all"
-            >
-              <LogOut size={14} /> Logout
-            </button>
+            {/* Logout lives in the Sidebar — no duplicate here. */}
           </div>
         </div>
 
@@ -253,10 +245,10 @@ export default function TeacherDashboard() {
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {[
-              { label: "Total Students", value: stats.total, color: "#5C94FC" },
-              { label: "Assigned", value: stats.assigned, color: "#FBD000" },
-              { label: "In Progress", value: stats.inProgress, color: "#FF9800" },
-              { label: "Completed", value: stats.completed, color: "#43B047" },
+              { label: t("td_total_students"), value: stats.total, color: "#5C94FC" },
+              { label: t("td_assigned"), value: stats.assigned, color: "#FBD000" },
+              { label: t("td_stat_in_progress"), value: stats.inProgress, color: "#FF9800" },
+              { label: t("td_stat_completed"), value: stats.completed, color: "#43B047" },
             ].map((s, i) => (
               <motion.div
                 key={s.label}
@@ -286,7 +278,7 @@ export default function TeacherDashboard() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24">
               <RefreshCw className="w-10 h-10 animate-spin text-primary mb-4" />
-              <p className="text-sm font-black uppercase tracking-widest text-black/40">Loading students…</p>
+              <p className="text-sm font-black uppercase tracking-widest text-black/40">{t("td_loading_students")}</p>
             </div>
           ) : students.length === 0 ? (
             <motion.div
@@ -295,14 +287,14 @@ export default function TeacherDashboard() {
               className="flex flex-col items-center justify-center py-24 border-4 border-dashed border-black/20"
             >
               <Users size={48} className="text-black/20 mb-4" />
-              <p className="text-2xl font-black uppercase italic text-black/20">No Students Yet</p>
-              <p className="text-xs font-black uppercase tracking-widest text-black/20 mt-2">Click "Add Student" to get started</p>
+              <p className="text-2xl font-black uppercase italic text-black/20">{t("td_no_students_yet")}</p>
+              <p className="text-xs font-black uppercase tracking-widest text-black/20 mt-2">{t("td_click_add_to_start")}</p>
             </motion.div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
               {students.map((student, i) => {
                 const st = STATUS_STYLES[student.assessment_status];
-                const atype = ASSESSMENT_TYPES.find(a => a.value === student.referral_assessment_type);
+                const conditions = parseConditions(student.detected_disabilities);
                 return (
                   <motion.div
                     key={student.id}
@@ -326,7 +318,7 @@ export default function TeacherDashboard() {
                           </div>
                         </div>
                         <span className={`px-2 py-1 border-2 text-[9px] font-black uppercase tracking-wide ${st.cls}`}>
-                          {st.label}
+                          {statusLabel(student.assessment_status)}
                         </span>
                       </div>
 
@@ -334,31 +326,42 @@ export default function TeacherDashboard() {
                         <p className="text-[11px] font-bold text-black/50 uppercase">📞 {student.phone}</p>
                       )}
 
-                      {/* Assessment badge + report link when completed */}
-                      {atype ? (
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`${atype.color} text-white px-3 py-1 border-2 border-black text-[10px] font-black uppercase tracking-widest shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]`}>
-                            {atype.icon} {atype.label}
-                          </span>
-                          {student.assessment_status === "completed" && student.report_url && (
-                            <a
-                              href={student.report_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 px-2 py-1 bg-black text-white border-2 border-black text-[9px] font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-800 transition-all"
-                            >
-                              📄 Report
-                            </a>
-                          )}
+                      {/* Condition — determined from the assessment report, not chosen by the teacher */}
+                      {student.assessment_status === "completed" ? (
+                        <div className="space-y-2">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-black/40">{t("td_condition_from_report")}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {conditions.length > 0 ? (
+                              conditions.map((c, idx) => (
+                                <span key={idx} className={`${c.color} text-white px-3 py-1 border-2 border-black text-[10px] font-black uppercase tracking-widest shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]`}>
+                                  {c.icon} {c.label}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="bg-[#43B047] text-white px-3 py-1 border-2 border-black text-[10px] font-black uppercase tracking-widest">{t("td_no_condition_detected")}</span>
+                            )}
+                            {student.report_url && (
+                              <a
+                                href={student.report_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 px-2 py-1 bg-black text-white border-2 border-black text-[9px] font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-800 transition-all"
+                              >
+                                📄 {t("td_report")}
+                              </a>
+                            )}
+                          </div>
                         </div>
+                      ) : student.referral_assessment_type ? (
+                        <p className="text-[10px] font-black uppercase text-black/40 italic">{t("td_assessment_assigned_awaiting")}</p>
                       ) : (
-                        <p className="text-[10px] font-black uppercase text-black/30 italic">No assessment assigned</p>
+                        <p className="text-[10px] font-black uppercase text-black/30 italic">{t("td_no_assessment_assigned")}</p>
                       )}
 
                       {/* Parent info */}
                       {student.parent_name && (
                         <div className="bg-muted border-2 border-black p-2">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-black/40">Parent Linked</p>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-black/40">{t("td_parent_linked")}</p>
                           <p className="text-[11px] font-bold text-black">{student.parent_name}</p>
                         </div>
                       )}
@@ -366,23 +369,23 @@ export default function TeacherDashboard() {
                       {/* Referral status */}
                       {student.latest_referral_code && (
                         <div className="text-[9px] font-black uppercase tracking-widest text-black/40">
-                          Referral: <span className="text-primary">{student.referral_status}</span>
+                          {t("td_referral")} <span className="text-primary">{statusLabel(student.referral_status || "")}</span>
                         </div>
                       )}
 
                       {/* Actions */}
                       <div className="flex flex-wrap gap-2 mt-auto pt-2 border-t-2 border-black/10">
                         <button
-                          onClick={() => { setAssigningStudent(student); setAssignType(student.referral_assessment_type || ""); setAssignResult(null); }}
+                          onClick={() => { setAssigningStudent(student); setAssignResult(null); }}
                           className="flex items-center gap-1.5 px-3 py-2 bg-primary text-white border-2 border-black text-[10px] font-black uppercase tracking-widest shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
                         >
-                          <Link2 size={11} /> Assign
+                          <Link2 size={11} /> {t("td_assign")}
                         </button>
                         <button
                           onClick={() => { setNotesStudent(student); fetchNotes(student.id); setNoteText(""); }}
                           className="flex items-center gap-1.5 px-3 py-2 bg-[#FBD000] text-black border-2 border-black text-[10px] font-black uppercase tracking-widest shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
                         >
-                          <FileText size={11} /> Notes
+                          <FileText size={11} /> {t("td_notes")}
                         </button>
                         <button
                           onClick={() => handleDelete(student.id, student.name)}
@@ -412,16 +415,16 @@ export default function TeacherDashboard() {
               exit={{ opacity: 0, scale: 0.92, y: 20 }}
               className="fixed inset-0 flex items-center justify-center z-50 p-4"
             >
-              <div className="w-full max-w-md bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
+              <div className="w-full max-w-xl bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
                 <div className="bg-primary p-6 border-b-4 border-black flex items-center justify-between">
-                  <h2 className="text-xl font-black text-white uppercase tracking-tight">Add Student</h2>
+                  <h2 className="text-xl font-black text-white uppercase tracking-tight">{t("td_add_student")}</h2>
                   <button onClick={() => setShowAdd(false)} className="text-white hover:scale-110 transition-transform"><X size={20} /></button>
                 </div>
                 <form onSubmit={handleAddStudent} className="p-6 space-y-4">
                   {[
-                    { label: "Full Name *", key: "name", type: "text", placeholder: "Student full name" },
-                    { label: "Email *", key: "email", type: "email", placeholder: "student@example.com" },
-                    { label: "Phone", key: "phone", type: "tel", placeholder: "+91 98765 43210" },
+                    { label: t("td_full_name_label"), key: "name", type: "text", placeholder: t("td_ph_student_name") },
+                    { label: t("td_email_label"), key: "email", type: "email", placeholder: "student@example.com" },
+                    { label: t("td_phone_label"), key: "phone", type: "tel", placeholder: "+91 98765 43210" },
                   ].map(f => (
                     <div key={f.key} className="space-y-1">
                       <label className="text-[10px] font-black uppercase tracking-widest text-black">{f.label}</label>
@@ -430,7 +433,7 @@ export default function TeacherDashboard() {
                         placeholder={f.placeholder}
                         value={(addForm as any)[f.key]}
                         onChange={e => setAddForm({ ...addForm, [f.key]: e.target.value })}
-                        className="w-full px-4 py-3 border-4 border-black bg-muted focus:bg-white focus:outline-none text-sm font-black uppercase tracking-tight transition-all"
+                        className={`w-full px-4 py-3.5 border-4 border-black bg-muted focus:bg-white focus:outline-none text-base font-black tracking-tight transition-all ${f.key === "name" ? "uppercase" : "lowercase"}`}
                       />
                     </div>
                   ))}
@@ -443,7 +446,7 @@ export default function TeacherDashboard() {
                     className="w-full py-4 bg-primary text-white border-4 border-black font-black uppercase tracking-widest shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2"
                   >
                     {addLoading ? <RefreshCw size={16} className="animate-spin" /> : <Plus size={16} />}
-                    {addLoading ? "Adding…" : "Add Student"}
+                    {addLoading ? t("td_adding") : t("td_add_student")}
                   </button>
                 </form>
               </div>
@@ -466,46 +469,38 @@ export default function TeacherDashboard() {
               <div className="w-full max-w-lg bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
                 <div className="bg-[#FBD000] p-6 border-b-4 border-black flex items-center justify-between">
                   <div>
-                    <h2 className="text-xl font-black text-black uppercase tracking-tight">Assign Assessment</h2>
-                    <p className="text-[11px] font-black text-black/60 uppercase mt-1">For: {assigningStudent.name}</p>
+                    <h2 className="text-xl font-black text-black uppercase tracking-tight">{t("td_assign_assessment")}</h2>
+                    <p className="text-[11px] font-black text-black/60 uppercase mt-1">{t("td_for")} {assigningStudent.name}</p>
                   </div>
                   <button onClick={() => { setAssigningStudent(null); setAssignResult(null); }}><X size={20} /></button>
                 </div>
                 <div className="p-6 space-y-4">
                   {!assignResult ? (
                     <>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-black/60">Select Assessment Type</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        {ASSESSMENT_TYPES.map(a => (
-                          <button
-                            key={a.value}
-                            onClick={() => setAssignType(a.value)}
-                            className={`p-3 border-4 border-black text-left transition-all ${assignType === a.value ? "shadow-none translate-x-1 translate-y-1" : "shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"} ${assignType === a.value ? a.color + " text-white" : "bg-muted text-black"}`}
-                          >
-                            <span className="text-lg">{a.icon}</span>
-                            <p className="text-[11px] font-black uppercase mt-1">{a.label}</p>
-                          </button>
-                        ))}
+                      <div className="bg-muted border-4 border-black p-4">
+                        <p className="text-sm font-bold text-black/70 leading-relaxed">
+                          {t("td_assign_desc_pre")} <span className="font-black text-black">{assigningStudent.name}</span> {t("td_assign_desc_post")}
+                        </p>
                       </div>
                       <button
                         onClick={handleAssign}
-                        disabled={!assignType || assignLoading}
+                        disabled={assignLoading}
                         className="w-full py-4 bg-primary text-white border-4 border-black font-black uppercase tracking-widest shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {assignLoading ? <RefreshCw size={16} className="animate-spin" /> : <Send size={16} />}
-                        {assignLoading ? "Generating Link…" : "Assign & Send Invite"}
+                        {assignLoading ? t("td_generating_link") : t("td_assign_send_invite")}
                       </button>
                     </>
                   ) : (
                     <div className="space-y-4">
                       <div className={`flex items-center gap-3 p-4 border-4 border-black ${assignResult.emailSent ? "bg-[#43B047]" : "bg-[#FBD000]"}`}>
                         {assignResult.emailSent
-                          ? <><Check size={20} className="text-white" /><p className="font-black text-white uppercase text-sm">Email sent to {assigningStudent.email}!</p></>
+                          ? <><Check size={20} className="text-white" /><p className="font-black text-white uppercase text-sm">{t("td_email_sent_to")} {assigningStudent.email}!</p></>
                           : <><AlertCircle size={20} /><p className="font-black uppercase text-sm">{assignResult.emailWarning}</p></>
                         }
                       </div>
                       <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-black/60 mb-2">Referral Link</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-black/60 mb-2">{t("td_referral_link")}</p>
                         <div className="flex gap-2">
                           <input
                             readOnly
@@ -524,7 +519,7 @@ export default function TeacherDashboard() {
                         onClick={() => { setAssigningStudent(null); setAssignResult(null); }}
                         className="w-full py-3 bg-primary text-white border-4 border-black font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
                       >
-                        Done
+                        {t("td_done")}
                       </button>
                     </div>
                   )}
@@ -549,7 +544,7 @@ export default function TeacherDashboard() {
             >
               <div className="p-6 border-b-4 border-black bg-[#FBD000] flex items-center justify-between flex-shrink-0">
                 <div>
-                  <h3 className="text-xl font-black uppercase tracking-tight">Notes</h3>
+                  <h3 className="text-xl font-black uppercase tracking-tight">{t("td_notes")}</h3>
                   <p className="text-[11px] font-black uppercase opacity-70">{notesStudent.name}</p>
                 </div>
                 <button onClick={() => setNotesStudent(null)}><X size={20} /></button>
@@ -562,7 +557,7 @@ export default function TeacherDashboard() {
                 ) : notes.length === 0 ? (
                   <div className="text-center py-12">
                     <MessageSquare size={36} className="text-black/20 mx-auto mb-3" />
-                    <p className="text-sm font-black uppercase text-black/30">No notes yet</p>
+                    <p className="text-sm font-black uppercase text-black/30">{t("td_no_notes_yet")}</p>
                   </div>
                 ) : (
                   notes.map(note => {
@@ -571,7 +566,7 @@ export default function TeacherDashboard() {
                       <div key={note.id} className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] p-4">
                         <div className="flex items-center gap-2 mb-2">
                           <span className={`${roleColor} text-white px-2 py-0.5 text-[9px] font-black uppercase tracking-widest border border-black`}>
-                            {note.author_role}
+                            {roleLabel(note.author_role)}
                           </span>
                           <span className="text-[10px] font-bold text-black/50 uppercase">{note.author_name}</span>
                           <span className="ml-auto text-[9px] text-black/30 font-bold">
@@ -588,7 +583,7 @@ export default function TeacherDashboard() {
                 <textarea
                   value={noteText}
                   onChange={e => setNoteText(e.target.value)}
-                  placeholder="Add an observation or note about this student…"
+                  placeholder={t("td_ph_note")}
                   rows={3}
                   className="w-full px-4 py-3 border-4 border-black bg-muted focus:bg-white focus:outline-none text-sm resize-none"
                 />
@@ -598,7 +593,7 @@ export default function TeacherDashboard() {
                   className="w-full mt-2 py-3 bg-primary text-white border-4 border-black font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                 >
                   {noteSubmitting ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
-                  Post Note
+                  {t("td_post_note")}
                 </button>
               </div>
             </motion.div>

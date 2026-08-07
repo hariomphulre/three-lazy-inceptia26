@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { XCircle, CheckCircle, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "@/hooks/useTranslation";
 import type { CardStatus } from "@/hooks/useProgress";
 
 /* ─── Shared phase / disability-config types ──────────────────────────────── */
@@ -55,6 +56,7 @@ export function PathGameModal({
   onFirstStart,
 }: PathGameModalProps) {
   const router = useRouter();
+  const { t } = useTranslation();
 
   if (!cfg || !open) return null;
 
@@ -122,7 +124,7 @@ export function PathGameModal({
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-white/60 text-[10px] font-black uppercase tracking-widest">
-                    Overall Progress
+                    {t("pgm_overall_progress")}
                   </span>
                   <span className="text-white text-[10px] font-black uppercase">
                     {progress}/{totalActivities} &middot; {pct}%
@@ -140,9 +142,9 @@ export function PathGameModal({
             {/* ── Phase list ── */}
             <div className="p-8">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-black text-black uppercase italic tracking-tight">Learning Path</h3>
+                <h3 className="text-xl font-black text-black uppercase italic tracking-tight">{t("pgm_learning_path")}</h3>
                 <span className="text-xs font-black text-black/40 uppercase tracking-widest">
-                  {cfg.phases.length} Phases &middot; {totalActivities} Activities
+                  {cfg.phases.length} {t("pgm_phases")} &middot; {totalActivities} {t("pgm_activities")}
                 </span>
               </div>
 
@@ -183,7 +185,7 @@ export function PathGameModal({
                                   : "bg-white/60 text-black/40"
                               }`}
                             >
-                              {ps.isCurrent ? "Current" : ps.isComplete ? "Complete" : `Phase ${idx + 1}`}
+                              {ps.isCurrent ? t("pgm_current") : ps.isComplete ? t("pgm_complete") : `${t("pgm_phase")} ${idx + 1}`}
                             </span>
                             {phase.difficulty && (
                               <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 border-2 border-black bg-secondary text-white">
@@ -196,14 +198,14 @@ export function PathGameModal({
                               ps.isComplete ? "text-white" : "text-black"
                             }`}
                           >
-                            Phase {idx + 1}: {phase.title}
+                            {t("pgm_phase")} {idx + 1}: {phase.title}
                           </p>
                           <p
                             className={`text-[10px] font-black uppercase tracking-widest ${
                               ps.isComplete ? "text-white/70" : "text-black/40"
                             }`}
                           >
-                            {phase.days} &middot; {phase.activities.length} Games
+                            {phase.days} &middot; {phase.activities.length} {t("pgm_games")}
                           </p>
                         </div>
                         {ps.isComplete && <CheckCircle size={22} className="text-white flex-shrink-0" />}
@@ -261,7 +263,7 @@ export function PathGameModal({
                               className="w-full py-5 text-sm uppercase italic tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1"
                             >
                               <Play size={14} className="fill-current mr-2" />
-                              {status === "idle" ? "Start Adventure" : "Continue Adventure"}
+                              {status === "idle" ? t("pgm_start_adventure") : t("pgm_continue_adventure")}
                             </Button>
                           </div>
                         )}
@@ -269,7 +271,7 @@ export function PathGameModal({
                         {status === "complete" && idx === cfg.phases.length - 1 && (
                           <div className="mt-4 w-full py-3 bg-[#43B047] border-4 border-black text-white text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                             <span className="text-sm font-black uppercase italic tracking-wider">
-                              Quest Cleared! &#127942;
+                              {t("pgm_quest_cleared")} &#127942;
                             </span>
                           </div>
                         )}
@@ -289,7 +291,7 @@ export function PathGameModal({
                 onClick={onClose}
                 className="px-6 py-2 bg-white border-4 border-black text-xs font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-accent transition-colors active:shadow-none active:translate-x-1 active:translate-y-1"
               >
-                Close
+                {t("pgm_close")}
               </button>
             </div>
           </motion.div>

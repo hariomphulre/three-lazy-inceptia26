@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Zap, Check, X } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface Level7Props {
   onComplete: () => void;
@@ -13,6 +14,7 @@ interface Level7Props {
 const TOTAL_ROUNDS = 6;
 
 export function Level7FocusAdventure({ onComplete, onProgress, phase = 0 }: Level7Props) {
+  const { t } = useTranslation();
   const [round, setRound] = useState(0);
   const [light, setLight] = useState<"red" | "yellow" | "green">("red");
   const [feedback, setFeedback] = useState<"correct" | "early" | null>(null);
@@ -54,7 +56,7 @@ export function Level7FocusAdventure({ onComplete, onProgress, phase = 0 }: Leve
   };
 
   const bgMap = { red: "bg-[#E52521]", yellow: "bg-[#FBD000]", green: "bg-[#43B047]" };
-  const labelMap = { red: "Wait…", yellow: "Almost…", green: "TAP NOW!" };
+  const labelMap = { red: t("game_l7_light_red"), yellow: t("game_l7_light_yellow"), green: t("game_l7_light_green") };
 
   return (
     <div className="w-full h-full flex flex-col bg-background overflow-y-auto">
@@ -64,16 +66,16 @@ export function Level7FocusAdventure({ onComplete, onProgress, phase = 0 }: Leve
           <div className="w-10 h-10 bg-white border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
             <Zap size={18} className="text-[#E52521]" />
           </div>
-          <span className="text-white font-black uppercase italic tracking-tight text-xl">Focus Adventure</span>
+          <span className="text-white font-black uppercase italic tracking-tight text-xl">{t("game_l7_title")}</span>
         </div>
         <div className="flex items-center gap-3">
           <div className="bg-white border-2 border-black px-3 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-            <span className="text-xs font-black uppercase tracking-widest">Score </span>
+            <span className="text-xs font-black uppercase tracking-widest">{t("game_l7_score")}{" "}</span>
             <span className="text-lg font-black">{score}</span>
           </div>
           <div className="bg-black/20 border-2 border-white/40 px-3 py-1">
             <span className="text-white text-xs font-black uppercase tracking-widest">
-              Round {round + 1}/{TOTAL_ROUNDS}
+              {t("game_l7_round")} {round + 1}/{TOTAL_ROUNDS}
             </span>
           </div>
         </div>
@@ -90,7 +92,7 @@ export function Level7FocusAdventure({ onComplete, onProgress, phase = 0 }: Leve
       {/* Game area */}
       <div className="flex-1 flex flex-col items-center justify-center gap-10 p-8 relative">
         <p className="text-center text-black/60 font-black uppercase tracking-widest text-sm max-w-sm">
-          Wait for the GREEN light — then tap as fast as you can!
+          {t("game_l7_instr")}
         </p>
 
         {/* Traffic light */}
@@ -140,7 +142,7 @@ export function Level7FocusAdventure({ onComplete, onProgress, phase = 0 }: Leve
                   <X size={72} strokeWidth={4} className="text-white" />
                 )}
                 <span className="text-white font-black uppercase italic text-xl tracking-tight">
-                  {feedback === "correct" ? "Nice Reflexes!" : "Too Early!"}
+                  {feedback === "correct" ? t("game_l7_correct") : t("game_l7_early")}
                 </span>
               </div>
             </motion.div>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Check, Volume2 } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface Level8Props {
   onComplete: () => void;
@@ -11,15 +12,16 @@ interface Level8Props {
 }
 
 const WORDS = [
-  { display: "Ba · na · na", syllables: 3, emoji: "🍌" },
-  { display: "El · e · phant", syllables: 3, emoji: "🐘" },
-  { display: "Um · brel · la", syllables: 3, emoji: "☂️" },
-  { display: "Wa · ter · mel · on", syllables: 4, emoji: "🍉" },
-  { display: "But · ter · fly", syllables: 3, emoji: "🦋" },
-  { display: "Hip · po · pot · a · mus", syllables: 5, emoji: "🦛" },
+  { dispKey: "game_l8_word1", syllables: 3, emoji: "🍌" },
+  { dispKey: "game_l8_word2", syllables: 3, emoji: "🐘" },
+  { dispKey: "game_l8_word3", syllables: 3, emoji: "☂️" },
+  { dispKey: "game_l8_word4", syllables: 4, emoji: "🍉" },
+  { dispKey: "game_l8_word5", syllables: 3, emoji: "🦋" },
+  { dispKey: "game_l8_word6", syllables: 5, emoji: "🦛" },
 ];
 
 export function Level8ClarityQuest({ onComplete, onProgress, phase = 0 }: Level8Props) {
+  const { t } = useTranslation();
   const [idx, setIdx] = useState(0);
   const [recording, setRecording] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -52,11 +54,11 @@ export function Level8ClarityQuest({ onComplete, onProgress, phase = 0 }: Level8
           <div className="w-10 h-10 bg-white border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
             <Volume2 size={18} className="text-[#9C27B0]" />
           </div>
-          <span className="text-white font-black uppercase italic tracking-tight text-xl">Clarity Quest</span>
+          <span className="text-white font-black uppercase italic tracking-tight text-xl">{t("game_l8_title")}</span>
         </div>
         <div className="flex items-center gap-3">
           <div className="bg-white border-2 border-black px-3 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-            <span className="text-xs font-black uppercase tracking-widest">Word </span>
+            <span className="text-xs font-black uppercase tracking-widest">{t("game_l8_word")}{" "}</span>
             <span className="text-lg font-black">{idx + 1}/{WORDS.length}</span>
           </div>
         </div>
@@ -73,7 +75,7 @@ export function Level8ClarityQuest({ onComplete, onProgress, phase = 0 }: Level8
       {/* Game area */}
       <div className="flex-1 flex flex-col items-center justify-center gap-8 p-8 relative">
         <p className="text-center text-black/60 font-black uppercase tracking-widest text-sm">
-          Say the word clearly — clap for each syllable!
+          {t("game_l8_instr")}
         </p>
 
         {/* Word card */}
@@ -86,7 +88,7 @@ export function Level8ClarityQuest({ onComplete, onProgress, phase = 0 }: Level8
           <span className="text-7xl">{word.emoji}</span>
           <div className="bg-[#9C27B0] border-2 border-black px-6 py-3">
             <span className="text-white font-black uppercase tracking-widest text-3xl">
-              {word.display}
+              {t(word.dispKey)}
             </span>
           </div>
           <div className="flex gap-2 mt-1">
@@ -109,7 +111,7 @@ export function Level8ClarityQuest({ onComplete, onProgress, phase = 0 }: Level8
           }`}
         >
           <Mic size={28} className={recording ? "animate-bounce" : ""} />
-          {recording ? "Listening…" : "Tap & Say It!"}
+          {recording ? t("game_l8_listening") : t("game_l8_btn_say")}
         </button>
 
         {/* Feedback overlay */}
@@ -125,7 +127,7 @@ export function Level8ClarityQuest({ onComplete, onProgress, phase = 0 }: Level8
               <div className="bg-[#43B047] border-8 border-black p-10 shadow-[16px_16px_0px_0px_rgba(0,0,0,1)] flex flex-col items-center gap-3 rotate-3">
                 <Check size={72} strokeWidth={4} className="text-white" />
                 <span className="text-white font-black uppercase italic text-2xl tracking-tight">
-                  Great Job!
+                  {t("game_l8_great")}
                 </span>
               </div>
             </motion.div>

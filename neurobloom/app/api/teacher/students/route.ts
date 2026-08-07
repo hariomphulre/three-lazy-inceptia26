@@ -19,7 +19,7 @@ export async function GET(req: Request) {
        s.referral_assessment_type, s.assessment_status, s.assessment_id,
        s.created_at,
        u.name AS parent_name, u.email AS parent_email,
-       caf.report_url,
+       caf.report_url, caf.detected_disabilities,
        r.code AS latest_referral_code,
        r.status AS referral_status,
        r.sent_at AS referral_sent_at

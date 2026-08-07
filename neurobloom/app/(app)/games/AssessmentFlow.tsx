@@ -12,7 +12,9 @@ import { TestComplete } from './TestComplete';
 type FlowStep = 'dashboard' | 'form' | 'terms' | 'permissions' | 'face-capture' | 'assessment' | 'complete';
 
 export function AssessmentFlow() {
-  const [currentStep, setCurrentStep] = useState<FlowStep>('dashboard');
+  // Start directly at the student form. The old 'dashboard' start step caused a
+  // circular trap for parents (their dashboard has no start button of its own).
+  const [currentStep, setCurrentStep] = useState<FlowStep>('form');
   const [studentData, setStudentData] = useState<StudentData | null>(null);
 
   const handleStartTest = () => {

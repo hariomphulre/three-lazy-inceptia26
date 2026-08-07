@@ -88,6 +88,7 @@ const getEmotionEmoji = (emotion: string) => {
 };
 
 export function CameraPreview() {
+  const { t } = useTranslation();
   const { isRecording } = useVideo();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);

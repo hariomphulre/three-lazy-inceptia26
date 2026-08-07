@@ -1,14 +1,17 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   User, BookOpen, Stethoscope, MessageSquare, Send,
-  FileDown, RefreshCw, LogOut, Plus, X, Check,
+  FileDown, RefreshCw, Plus, X, Check,
   Clock, AlertCircle, Heart, Play
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/context/AuthContext";
+import { parseConditions } from "@/lib/conditions";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface StudentProfile {
   id: string;
@@ -43,12 +46,13 @@ interface DoctorRequest {
   created_at: string;
 }
 
-interface DoctorOption {
+interface Doctor {
   id: string;
   name: string;
   email: string;
 }
 
+// Deterministic accent colours for the specialist cards (API only returns id/name/email)
 const DOCTOR_COLORS = ["#049CD8", "#E52521", "#43B047", "#FBD000", "#ff9f43", "#9C27B0"];
 
 const NOTE_ROLE_COLORS: Record<string, string> = {
@@ -58,18 +62,33 @@ const NOTE_ROLE_COLORS: Record<string, string> = {
   psychologist: "bg-[#9C27B0] text-white",
 };
 
-const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  not_started: { label: "Not Started", cls: "bg-gray-100 text-black border-black" },
-  in_progress: { label: "In Progress", cls: "bg-[#FBD000] text-black border-black" },
-  completed: { label: "Completed", cls: "bg-[#43B047] text-white border-black" },
-  pending: { label: "Pending", cls: "bg-[#FBD000] text-black border-black" },
-  accepted: { label: "Accepted", cls: "bg-[#43B047] text-white border-black" },
-  rejected: { label: "Rejected", cls: "bg-[#E52521] text-white border-black" },
+// Colour classes per status; the human label is resolved via t(`status_<key>`).
+const STATUS_CLS: Record<string, string> = {
+  not_started: "bg-gray-100 text-black border-black",
+  in_progress: "bg-[#FBD000] text-black border-black",
+  completed: "bg-[#43B047] text-white border-black",
+  pending: "bg-[#FBD000] text-black border-black",
+  accepted: "bg-[#43B047] text-white border-black",
+  rejected: "bg-[#E52521] text-white border-black",
 };
 
-export default function ParentDashboard() {
-  const { user, logout } = useAuth();
-  const [student, setStudent] = useState<StudentProfile | null>(null);
+export default function ParentDashboard({ onStartTest }: { onStartTest?: () => void }) {
+  const { user } = useAuth();
+  const { t } = useTranslation();
+  const router = useRouter();
+  // Translate a DB status/role token, falling back to a de-underscored version.
+  const statusLabel = (s: string) => t(`status_${s}`) === `status_${s}` ? s.replace("_", " ") : t(`status_${s}`);
+  const roleLabel = (r: string) => t(`role_${r}`) === `role_${r}` ? r : t(`role_${r}`);
+  // A parent can always launch the assessment, even without a teacher referral.
+  // With a linked child, the child's id is carried so the session links correctly.
+  const startAssessment = (studentId?: string) => {
+    if (studentId) router.push(`/assessment?student=${studentId}`);
+    else if (onStartTest) onStartTest();
+    else router.push("/assessment");
+  };
+
+  const [students, setStudents] = useState<StudentProfile[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState("");
 
@@ -79,20 +98,32 @@ export default function ParentDashboard() {
   const [noteSubmitting, setNoteSubmitting] = useState(false);
 
   const [doctorRequests, setDoctorRequests] = useState<DoctorRequest[]>([]);
-  const [doctors, setDoctors] = useState<DoctorOption[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [doctorsLoading, setDoctorsLoading] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [selectedDoctorId, setSelectedDoctorId] = useState("");
   const [requestSubmitting, setRequestSubmitting] = useState(false);
   const [requestError, setRequestError] = useState("");
+
+  // The currently-selected child (derived from the fetched list).
+  const student = students.find(s => s.id === selectedId) ?? null;
 
   const fetchProfile = useCallback(async () => {
     setProfileLoading(true);
     setProfileError("");
     try {
       const res = await fetch("/api/parent/profile");
-      if (!res.ok) throw new Error("Failed to load profile");
+      if (!res.ok) throw new Error(t("pd_err_load_profile"));
       const data = await res.json();
-      setStudent(data.student);
+      const list: StudentProfile[] = data.students ?? (data.student ? [data.student] : []);
+      setStudents(list);
+      setSelectedId(prev => {
+        // Keep the current selection if still present; otherwise prefer a child
+        // who hasn't completed the assessment, else fall back to the first.
+        if (prev && list.some(s => s.id === prev)) return prev;
+        const pending = list.find(s => s.assessment_status !== "completed");
+        return (pending ?? list[0])?.id ?? null;
+      });
     } catch (e: any) {
       setProfileError(e.message);
     } finally {
@@ -116,10 +147,11 @@ export default function ParentDashboard() {
   }, []);
 
   const fetchDoctors = useCallback(async () => {
+    setDoctorsLoading(true);
     try {
       const res = await fetch("/api/users/doctors");
       if (res.ok) setDoctors(await res.json());
-    } catch { }
+    } catch { } finally { setDoctorsLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -159,7 +191,7 @@ export default function ParentDashboard() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) { setRequestError(data.error || "Failed to send request"); return; }
+      if (!res.ok) { setRequestError(data.error || t("pd_err_send_request")); return; }
       setShowRequestModal(false);
       setSelectedDoctorId("");
       fetchDoctorRequests();
@@ -208,7 +240,7 @@ export default function ParentDashboard() {
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <RefreshCw className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-sm font-black uppercase tracking-widest text-black/40">Loading your dashboard…</p>
+            <p className="text-sm font-black uppercase tracking-widest text-black/40">{t("pd_loading")}</p>
           </div>
         </main>
       </div>
@@ -223,17 +255,18 @@ export default function ParentDashboard() {
         <div className="px-6 sm:px-8 pt-8 pb-4 bg-background border-b-4 border-black flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-black text-black uppercase italic tracking-tighter">
-              My Child's <span className="text-primary">Progress</span>
+              {students.length > 1 ? t("pd_header_my_childrens") : t("pd_header_my_childs")} <span className="text-primary">{t("pd_header_progress")}</span>
             </h1>
             <p className="text-xs font-black text-black/40 mt-1 uppercase tracking-widest">
-              Parent Portal · {user?.name}
+              {t("pd_parent_portal")} · {user?.name}
             </p>
           </div>
+          {/* Logout lives in the Sidebar — no duplicate here. */}
           <button
-            onClick={logout}
-            className="flex items-center gap-2 px-3 py-3 bg-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-50 transition-all"
+            onClick={() => startAssessment(selectedId ?? undefined)}
+            className="flex items-center gap-2 px-4 py-3 bg-[#43B047] text-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
           >
-            <LogOut size={14} /> Logout
+            <Play size={14} /> {t("pd_start_assessment")}
           </button>
         </div>
 
@@ -242,6 +275,31 @@ export default function ParentDashboard() {
             <div className="flex items-center gap-3 bg-red-50 border-4 border-[#E52521] p-4 mb-6">
               <AlertCircle size={18} className="text-[#E52521]" />
               <p className="text-sm font-black text-[#E52521] uppercase">{profileError}</p>
+            </div>
+          )}
+
+          {/* Child switcher — only when the parent has more than one linked child */}
+          {students.length > 1 && (
+            <div className="mb-6">
+              <p className="text-[10px] font-black uppercase tracking-widest text-black/40 mb-2">{t("pd_select_child")}</p>
+              <div className="flex flex-wrap gap-2">
+                {students.map(s => {
+                  const active = s.id === selectedId;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => setSelectedId(s.id)}
+                      className={`flex items-center gap-2 px-4 py-2.5 border-4 border-black text-xs font-black uppercase tracking-tight transition-all ${active ? "bg-primary text-white shadow-none translate-x-0.5 translate-y-0.5" : "bg-white text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"}`}
+                    >
+                      {s.name}
+                      <span
+                        title={s.assessment_status}
+                        className={`w-2.5 h-2.5 border border-black ${s.assessment_status === "completed" ? "bg-[#43B047]" : s.assessment_status === "in_progress" ? "bg-[#FBD000]" : "bg-white"}`}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -303,14 +361,14 @@ export default function ParentDashboard() {
                     </div>
                     <div>
                       <p className="font-black text-black text-xl uppercase tracking-tight">{student.name}</p>
-                      <p className="text-[10px] font-black text-black/40 uppercase tracking-widest">Student Profile</p>
+                      <p className="text-[10px] font-black text-black/40 uppercase tracking-widest">{t("pd_student_profile")}</p>
                     </div>
                   </div>
 
                   <div className="space-y-3">
-                    {student.referral_assessment_type && (
+                    {student.referral_assessment_type && student.referral_assessment_type !== "general" && (
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-black/50">Assessment</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-black/50">{t("pd_label_assessment")}</span>
                         <span className="px-3 py-1 bg-primary text-white border-2 border-black text-[10px] font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                           {student.referral_assessment_type}
                         </span>
@@ -318,26 +376,39 @@ export default function ParentDashboard() {
                     )}
                     {student.assessment_status && (
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-black/50">Status</span>
-                        <span className={`px-3 py-1 border-2 border-black text-[10px] font-black uppercase ${STATUS_CONFIG[student.assessment_status]?.cls || "bg-gray-100 text-black border-black"}`}>
-                          {STATUS_CONFIG[student.assessment_status]?.label || student.assessment_status.replace("_", " ")}
+                        <span className="text-[10px] font-black uppercase tracking-widest text-black/50">{t("pd_label_status")}</span>
+                        <span className={`px-3 py-1 border-2 border-black text-[10px] font-black uppercase ${STATUS_CLS[student.assessment_status] || "bg-gray-100 text-black border-black"}`}>
+                          {statusLabel(student.assessment_status)}
                         </span>
                       </div>
                     )}
                     {student.assessment_date && (
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-black/50">Date</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-black/50">{t("pd_label_date")}</span>
                         <span className="text-[11px] font-bold text-black">
                           {new Date(student.assessment_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                         </span>
                       </div>
                     )}
-                    {student.detected_disabilities && (
-                      <div className="bg-muted border-2 border-black p-3 mt-2">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-black/40 mb-1">Detected Areas</p>
-                        <p className="text-sm font-bold text-black">{student.detected_disabilities}</p>
-                      </div>
-                    )}
+                    {student.detected_disabilities && (() => {
+                      const conditions = parseConditions(student.detected_disabilities);
+                      return (
+                        <div className="bg-muted border-2 border-black p-3 mt-2">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-black/40 mb-2">{t("pd_condition_from_report")}</p>
+                          {conditions.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {conditions.map((c, idx) => (
+                                <span key={idx} className={`${c.color} text-white px-3 py-1 border-2 border-black text-[10px] font-black uppercase tracking-widest`}>
+                                  {c.icon} {c.label}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm font-bold text-black">{student.detected_disabilities}</p>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {student.report_url && (
                       <a
                         href={student.report_url}
@@ -345,7 +416,7 @@ export default function ParentDashboard() {
                         rel="noopener noreferrer"
                         className="flex items-center gap-2 w-full py-3 bg-black text-white border-4 border-black font-black uppercase tracking-widest text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all justify-center mt-3"
                       >
-                        <FileDown size={14} /> Download Report
+                        <FileDown size={14} /> {t("pd_download_report")}
                       </a>
                     )}
                   </div>
@@ -362,7 +433,7 @@ export default function ParentDashboard() {
                 <div className="h-2 bg-[#049CD8]" />
                 <div className="p-6">
                   <h3 className="text-sm font-black uppercase tracking-widest text-black/40 mb-4 flex items-center gap-2">
-                    <BookOpen size={14} /> Assigned Teacher
+                    <BookOpen size={14} /> {t("pd_assigned_teacher")}
                   </h3>
                   {student.teacher_name ? (
                     <div className="space-y-4">
@@ -376,12 +447,12 @@ export default function ParentDashboard() {
                         </div>
                       </div>
                       <div className="bg-[#049CD8]/10 border-2 border-[#049CD8] p-4">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#049CD8] mb-1">Contact</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[#049CD8] mb-1">{t("pd_contact")}</p>
                         <p className="text-sm font-bold text-black">{student.teacher_email}</p>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm font-black uppercase text-black/30 italic">No teacher assigned yet</p>
+                    <p className="text-sm font-black uppercase text-black/30 italic">{t("pd_no_teacher")}</p>
                   )}
 
                   {/* Doctor requests — available whether or not a teacher is assigned */}
@@ -389,7 +460,7 @@ export default function ParentDashboard() {
                 </div>
               </motion.div>
 
-              {/* SECTION 3 — Notes (full width) */}
+              {/* SECTION 4 — Notes (full width) */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -399,19 +470,19 @@ export default function ParentDashboard() {
                 <div className="h-2 bg-[#43B047]" />
                 <div className="p-6">
                   <h3 className="text-sm font-black uppercase tracking-widest text-black/40 mb-4 flex items-center gap-2">
-                    <MessageSquare size={14} /> Notes & Observations
+                    <MessageSquare size={14} /> {t("pd_notes_title")}
                   </h3>
                   {notesLoading ? (
                     <div className="flex items-center justify-center py-8"><RefreshCw className="animate-spin text-primary" size={20} /></div>
                   ) : notes.length === 0 ? (
-                    <p className="text-sm font-black uppercase text-black/20 italic mb-4">No notes yet — be the first to add one!</p>
+                    <p className="text-sm font-black uppercase text-black/20 italic mb-4">{t("pd_no_notes")}</p>
                   ) : (
                     <div className="space-y-3 mb-5 max-h-72 overflow-y-auto">
                       {notes.map(note => (
                         <div key={note.id} className="border-2 border-black p-4 bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                           <div className="flex items-center gap-2 mb-2">
                             <span className={`${NOTE_ROLE_COLORS[note.author_role] || "bg-gray-400 text-white"} px-2 py-0.5 text-[9px] font-black uppercase border border-black`}>
-                              {note.author_role}
+                              {roleLabel(note.author_role)}
                             </span>
                             <span className="text-[10px] font-bold text-black/50">{note.author_name}</span>
                             <span className="ml-auto text-[9px] text-black/30 font-bold">
@@ -424,11 +495,11 @@ export default function ParentDashboard() {
                     </div>
                   )}
                   <div className="border-t-2 border-black/10 pt-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-black/40 mb-2">Add a Note</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-black/40 mb-2">{t("pd_add_note")}</p>
                     <textarea
                       value={noteText}
                       onChange={e => setNoteText(e.target.value)}
-                      placeholder="Share an observation about your child's progress, behaviour, or anything relevant…"
+                      placeholder={t("pd_note_placeholder")}
                       rows={3}
                       className="w-full px-4 py-3 border-4 border-black bg-muted focus:bg-white focus:outline-none text-sm resize-none"
                     />
@@ -438,7 +509,7 @@ export default function ParentDashboard() {
                       className="mt-2 flex items-center gap-2 px-5 py-3 bg-[#43B047] text-white border-4 border-black font-black uppercase tracking-widest text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-40"
                     >
                       {noteSubmitting ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
-                      Post Note
+                      {t("pd_post_note")}
                     </button>
                   </div>
                 </div>
@@ -507,7 +578,7 @@ export default function ParentDashboard() {
                     className="w-full py-4 bg-[#9C27B0] text-white border-4 border-black font-black uppercase tracking-widest shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2 disabled:opacity-40 mt-2"
                   >
                     {requestSubmitting ? <RefreshCw size={14} className="animate-spin" /> : <Stethoscope size={14} />}
-                    Send Request
+                    {t("pd_send_request")}
                   </button>
                 </div>
               </div>

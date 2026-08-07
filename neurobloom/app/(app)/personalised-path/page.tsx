@@ -32,6 +32,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
+import { useTranslation } from "@/hooks/useTranslation";
 import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -515,9 +516,11 @@ function AssessmentCard({
   onEndPath: () => void;
   onStart: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const cfg = DISABILITY_CONFIG[disability.toLowerCase()];
+  const disKey = disability.toLowerCase();
+  const cfg = DISABILITY_CONFIG[disKey];
   const totalActivities = cfg?.phases.reduce((s, p) => s + p.activities.length, 0) ?? 15;
   const { progress, status, startDate, endDate, handleStart: hookHandleStart, handleComplete, completeActivity, isLoaded } = useProgress(id, totalActivities);
 
@@ -556,9 +559,9 @@ function AssessmentCard({
   const handleOpenPath = () => setShowPathModal(true);
 
   const statusStyles: Record<CardStatus, { label: string; variant: string; color: string }> = {
-    idle:     { label: "Ready",   variant: "bg-accent",    color: "text-black" },
-    running:  { label: "Playing", variant: "bg-secondary", color: "text-white" },
-    complete: { label: "Finished",variant: "bg-[#43B047]", color: "text-white" },
+    idle:     { label: t("pp_status_ready"),    variant: "bg-accent",    color: "text-black" },
+    running:  { label: t("pp_status_playing"),  variant: "bg-secondary", color: "text-white" },
+    complete: { label: t("pp_status_finished"), variant: "bg-[#43B047]", color: "text-white" },
   };
   const ss = statusStyles[status];
 
@@ -608,10 +611,10 @@ function AssessmentCard({
             </div>
             <button
               onClick={() => {
-                if (confirm(`End learning path for ${childName}?`)) onEndPath();
+                if (confirm(`${t("pp_end_path_confirm")} ${childName}?`)) onEndPath();
               }}
               className="text-primary hover:scale-110 transition-transform p-1"
-              title="End Path"
+              title={t("pp_end_path")}
             >
               <XCircle size={20} />
             </button>
@@ -622,8 +625,8 @@ function AssessmentCard({
             {/* FIX: long names were overflowing — added truncate + min-w-0 */}
             <h3 className="text-2xl font-black text-black uppercase italic tracking-tighter leading-none truncate">{childName}</h3>
             <p className="text-xs font-black text-black/40 mt-1 uppercase tracking-widest">
-              Age {age} &middot; {gender}
-              {isPending && <span className="ml-2 text-primary">(AI Pending)</span>}
+              {t("pp_age")} {age} &middot; {gender}
+              {isPending && <span className="ml-2 text-primary">{t("pp_ai_pending")}</span>}
             </p>
           </div>
 
@@ -633,15 +636,15 @@ function AssessmentCard({
               {cfg?.icon}
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-black text-black/40 uppercase tracking-widest leading-none mb-1">Condition</p>
-              <p className="text-sm font-black text-black uppercase truncate">{cfg?.label ?? disability}</p>
+              <p className="text-[10px] font-black text-black/40 uppercase tracking-widest leading-none mb-1">{t("pp_condition")}</p>
+              <p className="text-sm font-black text-black uppercase truncate">{cfg ? t(`pp_dis_${disKey}_label`) : disability}</p>
             </div>
           </div>
 
           {/* ── Progress bar ── */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black text-black/40 uppercase tracking-widest">Quest Progress</span>
+              <span className="text-[10px] font-black text-black/40 uppercase tracking-widest">{t("pp_quest_progress")}</span>
               <span className="text-[10px] font-black text-black uppercase">
                 {progress}/{totalActivities} &middot; {pct}%
               </span>
@@ -661,10 +664,10 @@ function AssessmentCard({
             <div className="space-y-3 cursor-pointer group/map">
               <div className="flex items-center justify-between">
                 <p className="text-[10px] font-black text-black/40 uppercase tracking-widest group-hover/map:text-primary transition-colors">
-                  World Map
+                  {t("pp_world_map")}
                 </p>
                 <div className="flex items-center gap-1 text-[10px] font-black text-black/30 group-hover/map:text-primary transition-colors uppercase tracking-widest">
-                  Expand <ChevronRight size={10} className="group-hover/map:translate-x-0.5 transition-transform" />
+                  {t("pp_expand")} <ChevronRight size={10} className="group-hover/map:translate-x-0.5 transition-transform" />
                 </div>
               </div>
               {/* FIX: bottom padding so W-N labels don't clip */}
@@ -677,7 +680,7 @@ function AssessmentCard({
                       className={`aspect-square border-2 border-black flex items-center justify-center relative shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform group-hover/map:scale-105 ${
                         isComplete ? "bg-chart-4" : isCurrent ? "bg-accent animate-pulse" : "bg-muted"
                       }`}
-                      title={`${phase.title}: ${phase.days}`}
+                      title={`${t(`pp_dis_${disKey}_p${idx}_title`)}: ${t(`pp_phase_days_${idx}`)}`}
                     >
                       <span className="text-sm">{phase.emoji}</span>
                       {isComplete && (
@@ -696,11 +699,11 @@ function AssessmentCard({
           {/* ── Dates ── */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-muted border-2 border-black p-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-              <p className="text-[9px] font-black text-black/40 uppercase leading-none mb-1">Started</p>
+              <p className="text-[9px] font-black text-black/40 uppercase leading-none mb-1">{t("pp_started")}</p>
               <p className="text-[10px] font-black text-black uppercase">{fmtDate(startDate)}</p>
             </div>
             <div className="bg-muted border-2 border-black p-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-              <p className="text-[9px] font-black text-black/40 uppercase leading-none mb-1">Target</p>
+              <p className="text-[9px] font-black text-black/40 uppercase leading-none mb-1">{t("pp_target")}</p>
               <p className="text-[10px] font-black text-black uppercase">{fmtDate(endDate)}</p>
             </div>
           </div>
@@ -711,7 +714,7 @@ function AssessmentCard({
               <Button variant="outline" className="w-full text-xs py-5 uppercase tracking-widest" asChild>
                 <a href={reportUrl} target="_blank" rel="noopener noreferrer">
                   <FileText size={14} className="mr-2" />
-                  View Scroll
+                  {t("pp_view_scroll")}
                 </a>
               </Button>
             )}
@@ -719,7 +722,7 @@ function AssessmentCard({
             {status === "idle" && (
               <Button onClick={handleOpenPath} className="w-full py-6 text-sm uppercase italic tracking-wider">
                 <Play size={14} className="fill-current mr-2" />
-                Begin Quest
+                {t("pp_begin_quest")}
               </Button>
             )}
 
@@ -729,13 +732,13 @@ function AssessmentCard({
                 className="w-full py-6 text-sm bg-secondary text-white uppercase italic tracking-wider"
               >
                 <RefreshCw size={14} className="mr-2" />
-                Continue Adventure
+                {t("pp_continue_adventure")}
               </Button>
             )}
 
             {status === "complete" && (
               <div className="w-full py-3 bg-[#43B047] border-4 border-black text-white text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                <span className="text-sm font-black uppercase italic tracking-wider">Quest Cleared!</span>
+                <span className="text-sm font-black uppercase italic tracking-wider">{t("pp_quest_cleared")}</span>
               </div>
             )}
           </div>
@@ -767,10 +770,10 @@ function AssessmentCard({
             {cfg?.icon}
           </div>
           <DialogTitle className="text-4xl font-black text-white uppercase italic tracking-tighter leading-none mb-2 relative z-10">
-            {cfg?.questName}
+            {cfg && t(`pp_dis_${disKey}_quest`)}
           </DialogTitle>
           <DialogDescription className="text-white/80 font-black uppercase tracking-widest text-xs relative z-10">
-            Adventure Roadmap for {childName} &middot; {cfg?.duration}
+            {t("pp_adventure_roadmap_for")} {childName} &middot; {cfg && t("pp_duration_30_days")}
           </DialogDescription>
         </DialogHeader>
 
@@ -779,7 +782,7 @@ function AssessmentCard({
 
             {/* Left — Mission Log */}
             <div className="space-y-6">
-              <h4 className="text-xl font-black text-black uppercase italic tracking-tight border-b-4 border-black pb-2">Mission Log</h4>
+              <h4 className="text-xl font-black text-black uppercase italic tracking-tight border-b-4 border-black pb-2">{t("pp_mission_log")}</h4>
               <div className="space-y-4">
                 {cfg?.phases.map((phase, idx) => {
                   const { isComplete, isCurrent } = getPhaseState(idx);
@@ -795,12 +798,12 @@ function AssessmentCard({
                         <div className="flex items-center justify-between gap-2 mb-1">
                           {/* FIX: long phase titles were overflowing dialog */}
                           <p className={`text-sm font-black uppercase truncate ${isComplete ? "text-white" : "text-black"}`}>
-                            W{idx + 1}: {phase.title}
+                            W{idx + 1}: {t(`pp_dis_${disKey}_p${idx}_title`)}
                           </p>
                           {isComplete && <CheckCircle size={14} className="flex-shrink-0" />}
                         </div>
                         <p className={`text-[10px] font-bold uppercase tracking-widest ${isComplete ? "text-white/70" : "text-black/40"}`}>
-                          {phase.days}
+                          {t(`pp_phase_days_${idx}`)}
                         </p>
                       </div>
                     </div>
@@ -811,7 +814,7 @@ function AssessmentCard({
 
             {/* Right — Quest Activities */}
             <div className="space-y-6">
-              <h4 className="text-xl font-black text-black uppercase italic tracking-tight border-b-4 border-black pb-2">Quest Activities</h4>
+              <h4 className="text-xl font-black text-black uppercase italic tracking-tight border-b-4 border-black pb-2">{t("pp_quest_activities")}</h4>
               <div className="bg-muted border-4 border-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] min-h-[200px]">
                 {currentPhaseIdx !== -1 && cfg ? (
                   (() => {
@@ -820,12 +823,12 @@ function AssessmentCard({
                       <div className="space-y-4">
                         <div className="flex items-center gap-2 mb-4">
                           <Badge variant="secondary" className="border-2 border-black rounded-none uppercase font-black px-3 py-1">
-                            Current World
+                            {t("pp_current_world")}
                           </Badge>
                         </div>
-                        <p className="text-lg font-black text-black uppercase leading-tight">{phase.title}</p>
+                        <p className="text-lg font-black text-black uppercase leading-tight">{t(`pp_dis_${disKey}_p${currentPhaseIdx}_title`)}</p>
                         <ul className="space-y-3">
-                          {phase.activities.map((act, i) => {
+                          {phase.activities.map((_act, i) => {
                             // FIX: highlight already-done activities within current phase
                             const { prevCount } = getPhaseState(currentPhaseIdx);
                             const isDone = progress > prevCount + i;
@@ -840,7 +843,7 @@ function AssessmentCard({
                                   }
                                 </div>
                                 <span className={`text-sm font-bold transition-colors ${isDone ? "text-black/40 line-through" : "text-black/70 group-hover:text-black"}`}>
-                                  {act}
+                                  {t(`pp_dis_${disKey}_p${currentPhaseIdx}_a${i}`)}
                                 </span>
                               </li>
                             );
@@ -854,7 +857,7 @@ function AssessmentCard({
                           }
                           className="w-full mt-6 py-6 text-sm uppercase italic tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1"
                         >
-                          Start Activity
+                          {t("pp_start_activity")}
                         </Button>
                       </div>
                     );
@@ -867,8 +870,8 @@ function AssessmentCard({
                     </div>
                     <p className="text-sm font-black text-black uppercase italic">
                       {status === "complete"
-                        ? "All quests cleared! Amazing work!"
-                        : "Begin your journey to see today's missions!"}
+                        ? t("pp_all_quests_cleared")
+                        : t("pp_begin_journey")}
                     </p>
                   </div>
                 )}
@@ -887,6 +890,7 @@ const FILTERS = ["All", "Dyslexia", "Dyscalculia", "Dysgraphia", "ASD", "ADHD", 
 
 /* ─── Level Transition Overlay ───────────────────────────────────────────── */
 function LevelTransition({ heroName, onComplete }: { heroName: string; onComplete: () => void }) {
+  const { t } = useTranslation();
   return (
     <motion.div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black"
@@ -904,7 +908,7 @@ function LevelTransition({ heroName, onComplete }: { heroName: string; onComplet
           <div className="w-24 h-24 bg-accent border-4 border-black rounded-lg flex items-center justify-center shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] animate-bounce">
             <span className="text-5xl">⭐</span>
           </div>
-          <h2 className="text-white text-2xl font-black uppercase tracking-widest italic">Ready, {heroName}?</h2>
+          <h2 className="text-white text-2xl font-black uppercase tracking-widest italic">{t("pp_ready")}, {heroName}?</h2>
         </div>
 
         <div className="relative h-24 flex items-center justify-center overflow-hidden w-64">
@@ -915,7 +919,7 @@ function LevelTransition({ heroName, onComplete }: { heroName: string; onComplet
             transition={{ times: [0, 0.4, 0.6, 1], duration: 2, ease: "anticipate" }}
             onAnimationComplete={onComplete}
           >
-            Go!
+            {t("pp_go")}
           </motion.h1>
         </div>
       </motion.div>
@@ -933,6 +937,7 @@ function LevelTransition({ heroName, onComplete }: { heroName: string; onComplet
 
 /* ─── Main Page ────────────────────────────────────────────────────────────── */
 export default function PersonalisedPathPage() {
+  const { t } = useTranslation();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("All");
@@ -988,12 +993,12 @@ export default function PersonalisedPathPage() {
       const res = await fetch(`/api/assessments/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        alert(`Delete failed: ${body.error ?? res.statusText}`);
+        alert(`${t("pp_delete_failed")} ${body.error ?? res.statusText}`);
         return;
       }
       setAssessments((prev) => prev.filter((a) => a.id !== id));
     } catch {
-      alert("Delete failed: network error. Check your connection.");
+      alert(t("pp_delete_failed_network"));
     }
   };
 
@@ -1023,9 +1028,9 @@ export default function PersonalisedPathPage() {
         <div className="px-8 pt-10 pb-4 flex-shrink-0 bg-background border-b-4 border-black">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-4xl font-black text-black uppercase italic tracking-tighter">Adventure Roadmap</h1>
+              <h1 className="text-4xl font-black text-black uppercase italic tracking-tighter">{t("pp_adventure_roadmap")}</h1>
               <p className="text-sm font-black text-black/40 mt-1 uppercase tracking-widest">
-                {totalCards} {totalCards === 1 ? "Hero" : "Heroes"} on a Mission
+                {totalCards} {totalCards === 1 ? t("pp_hero") : t("pp_heroes")} {t("pp_on_a_mission")}
               </p>
             </div>
             <LanguageSwitcher />
@@ -1038,7 +1043,7 @@ export default function PersonalisedPathPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search hero or quest..."
+                placeholder={t("pp_search_placeholder")}
                 className="w-full bg-transparent text-sm font-black uppercase outline-none placeholder:text-black/20"
               />
               {/* FIX: clear button when search has text */}
@@ -1060,7 +1065,7 @@ export default function PersonalisedPathPage() {
                       : "bg-white text-black hover:bg-muted active:translate-y-0.5 active:shadow-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                   }`}
                 >
-                  {f === "All" ? "All Worlds" : f}
+                  {f === "All" ? t("pp_all_worlds") : t(`pp_filter_${f.toLowerCase()}`)}
                 </button>
               ))}
             </div>
@@ -1081,7 +1086,7 @@ export default function PersonalisedPathPage() {
                 <div className="w-20 h-20 bg-accent border-4 border-black rounded-lg flex items-center justify-center animate-bounce shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                   <span className="text-4xl font-black text-black">?</span>
                 </div>
-                <p className="text-xl font-black text-black uppercase italic tracking-widest">Loading World...</p>
+                <p className="text-xl font-black text-black uppercase italic tracking-widest">{t("pp_loading_world")}</p>
               </motion.div>
 
             ) : totalCards === 0 ? (
@@ -1093,9 +1098,9 @@ export default function PersonalisedPathPage() {
                 className="flex flex-col items-center justify-center py-16 gap-6"
               >
                 <div className="text-8xl animate-bounce">🏰</div>
-                <h4 className="text-3xl font-black text-black uppercase italic text-center">Your Princess is in Another Castle!</h4>
+                <h4 className="text-3xl font-black text-black uppercase italic text-center">{t("pp_empty_title")}</h4>
                 <p className="text-sm font-bold text-black/40 max-w-sm text-center uppercase tracking-widest">
-                  Finish an assessment to unlock your personalized adventure roadmap!
+                  {t("pp_empty_desc")}
                 </p>
               </motion.div>
 
@@ -1109,12 +1114,12 @@ export default function PersonalisedPathPage() {
                 className="flex flex-col items-center justify-center py-16 gap-4"
               >
                 <div className="text-6xl">🔍</div>
-                <p className="text-lg font-black text-black uppercase italic">No heroes found!</p>
+                <p className="text-lg font-black text-black uppercase italic">{t("pp_no_heroes_found")}</p>
                 <button
                   onClick={() => { setSearch(""); setFilter("All"); }}
                   className="text-xs font-black uppercase tracking-widest text-primary underline hover:no-underline"
                 >
-                  Clear filters
+                  {t("pp_clear_filters")}
                 </button>
               </motion.div>
 
@@ -1148,7 +1153,7 @@ export default function PersonalisedPathPage() {
         <footer className="h-12 bg-white border-t-4 border-black px-8 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-[#43B047] border border-black animate-pulse" />
-            <span className="text-xs font-black uppercase tracking-widest">System Online</span>
+            <span className="text-xs font-black uppercase tracking-widest">{t("pp_system_online")}</span>
           </div>
           <span className="text-xs text-black/40 font-black uppercase tracking-widest">NeuroBloom v4.0</span>
         </footer>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from "framer-motion";
 import { User, Calendar, Users, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { useVideo } from "@/context/VideoContext";
@@ -32,6 +32,39 @@ export function StudentForm({ onNext, onBack }: StudentFormProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  // When the parent reached here via a teacher's referral, the child's name is
+  // already on record — pre-fill and lock it so it can't diverge from the
+  // student the teacher registered. Self-start parents (no linked student) keep
+  // the fully editable form.
+  const [nameLocked, setNameLocked] = useState(false);
+  // The specific linked child being assessed (from /assessment?student=<id>),
+  // so the created session links to the right sibling.
+  const [linkedStudentId, setLinkedStudentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const requestedId = new URLSearchParams(window.location.search).get("student");
+        const res = await fetch("/api/parent/profile");
+        if (!res.ok) return;
+        const { students } = await res.json();
+        const list: any[] = Array.isArray(students) ? students : [];
+        // Prefer the requested child; otherwise, if there's exactly one, use it.
+        const target =
+          list.find(s => s.id === requestedId) ??
+          (list.length === 1 ? list[0] : null);
+        if (active && target?.name) {
+          setFormData(prev => ({ ...prev, name: target.name }));
+          setNameLocked(true);
+          setLinkedStudentId(target.id);
+        }
+      } catch {
+        /* no linked student → leave the name editable (self-start) */
+      }
+    })();
+    return () => { active = false; };
+  }, []);
 
   const validate = () => {
     const newErrors: { [key: string]: string } = {};
@@ -47,6 +80,11 @@ export function StudentForm({ onNext, onBack }: StudentFormProps) {
 
     setIsSubmitting(true);
     setSubmitError(null);
+    const res = await fetch("/api/session/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...formData, studentId: linkedStudentId || undefined })
+    });
 
     try {
       // Offline-first: create local UUID session immediately, sync when online
@@ -96,14 +134,22 @@ export function StudentForm({ onNext, onBack }: StudentFormProps) {
                 <label className="text-xs font-black text-black uppercase tracking-widest flex items-center gap-2">
                   <User size={16} className="text-primary" />
                   {t('sf_full_name')}
+                  {nameLocked && (
+                    <span className="ml-auto flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-[#43B047]">
+                      <CheckCircle2 size={12} /> From your teacher
+                    </span>
+                  )}
                 </label>
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => { if (!nameLocked) setFormData({ ...formData, name: e.target.value }); }}
+                  readOnly={nameLocked}
                   placeholder={t('sf_name_placeholder')}
-                  className={`w-full px-6 py-4 bg-muted border-4 border-black text-sm font-black uppercase tracking-tight focus:outline-none focus:bg-white transition-all ${
-                    errors.name ? 'border-primary' : 'border-black'
+                  className={`w-full px-6 py-4 border-4 text-sm font-black uppercase tracking-tight focus:outline-none transition-all ${
+                    nameLocked
+                      ? 'bg-[#43B047]/10 border-black text-black/70 cursor-not-allowed'
+                      : `bg-muted focus:bg-white ${errors.name ? 'border-primary' : 'border-black'}`
                   }`}
                 />
               </div>
