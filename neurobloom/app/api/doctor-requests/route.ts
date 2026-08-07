@@ -53,18 +53,46 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { studentId, doctorId } = await req.json();
-  if (!studentId || !doctorId) {
-    return NextResponse.json({ error: "studentId and doctorId are required" }, { status: 400 });
+  const { studentId: bodyStudentId, doctorId } = await req.json();
+  if (!doctorId) {
+    return NextResponse.json({ error: "doctorId is required" }, { status: 400 });
   }
 
-  // Verify this parent owns the student
-  const studentCheck = await pool.query(
-    "SELECT id FROM students WHERE id = $1 AND user_id = $2",
-    [studentId, auth.userId]
-  );
-  if ((studentCheck.rowCount ?? 0) === 0) {
-    return NextResponse.json({ error: "Student not found" }, { status: 404 });
+  // Resolve student: use provided id if owned by parent, otherwise find/create
+  // a student linked to this parent (works even without a teacher connection).
+  let studentId: string | null = bodyStudentId ?? null;
+
+  if (studentId) {
+    const studentCheck = await pool.query(
+      "SELECT id FROM students WHERE id = $1 AND user_id = $2",
+      [studentId, auth.userId]
+    );
+    if ((studentCheck.rowCount ?? 0) === 0) {
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+  } else {
+    const existing = await pool.query(
+      "SELECT id FROM students WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1",
+      [auth.userId]
+    );
+    if ((existing.rowCount ?? 0) > 0) {
+      studentId = existing.rows[0].id;
+    } else {
+      const parent = await pool.query(
+        "SELECT name, email FROM users WHERE id = $1",
+        [auth.userId]
+      );
+      if ((parent.rowCount ?? 0) === 0) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+      const created = await pool.query(
+        `INSERT INTO students (name, email, user_id)
+         VALUES ($1, $2, $3)
+         RETURNING id`,
+        [parent.rows[0].name, parent.rows[0].email, auth.userId]
+      );
+      studentId = created.rows[0].id;
+    }
   }
 
   // Verify the target is a doctor/psychologist

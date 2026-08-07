@@ -29,7 +29,13 @@ export function AssessmentFlow() {
   };
 
   const handlePermissionsComplete = () => {
-    setCurrentStep('assessment');
+    // FIX 1: Route to face-capture after permissions are granted
+    setCurrentStep('face-capture');
+  };
+
+  const handleFaceCaptureComplete = () => {
+    // This correctly routes to the assessment after face is captured
+    setCurrentStep('assessment'); 
   };
 
   const handleAssessmentComplete = async () => {
@@ -48,16 +54,10 @@ export function AssessmentFlow() {
     } catch (e) {
       console.warn('Could not update assessment status:', e);
     }
-    setCurrentStep('face-capture');
+    
+    // FIX 2: Route to complete screen when test is done
+    setCurrentStep('complete');
   };
-
-  const handleFaceCaptureComplete = () => {
-    setCurrentStep('assessment');
-  };
-
-  // const handleAssessmentComplete = () => {
-  //   setCurrentStep('complete');
-  // };
 
   const handleReturnHome = () => {
     setCurrentStep('dashboard');
