@@ -4,9 +4,9 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  User, BookOpen, Stethoscope, MessageSquare, Send,
+  BookOpen, Stethoscope, MessageSquare, Send,
   FileDown, RefreshCw, Plus, X, Check,
-  Clock, AlertCircle, Heart, Play
+  AlertCircle, Heart, Play
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/context/AuthContext";
@@ -223,8 +223,8 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                 <p className="text-[11px] font-black text-black uppercase">{req.doctor_name}</p>
                 <p className="text-[9px] text-black/40 font-bold">{req.doctor_email}</p>
               </div>
-              <span className={`px-2 py-0.5 border border-black text-[9px] font-black uppercase ${STATUS_CONFIG[req.status]?.cls || ""}`}>
-                {req.status}
+              <span className={`px-2 py-0.5 border border-black text-[9px] font-black uppercase ${STATUS_CLS[req.status] || ""}`}>
+                {statusLabel(req.status)}
               </span>
             </div>
           ))}
