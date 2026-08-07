@@ -31,7 +31,22 @@ export function AssessmentFlow() {
     setCurrentStep('assessment');
   };
 
-  const handleAssessmentComplete = () => {
+  const handleAssessmentComplete = async () => {
+    // Mark the linked student record as completed
+    try {
+      const sessionId = typeof window !== 'undefined'
+        ? localStorage.getItem('sessionId')
+        : null;
+      if (sessionId) {
+        await fetch('/api/session/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId }),
+        });
+      }
+    } catch (e) {
+      console.warn('Could not update assessment status:', e);
+    }
     setCurrentStep('complete');
   };
 

@@ -1,15 +1,19 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+-- ─── Users ───────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
-  role TEXT CHECK (role IN ('parent', 'educator', 'researcher')) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  role TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT users_role_check CHECK (
+    role IN ('parent', 'educator', 'researcher', 'teacher', 'doctor', 'psychologist')
+  )
 );
 
-
+-- ─── Child Assessment Features ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS child_assessment_features (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   child_name TEXT NOT NULL,
@@ -17,63 +21,120 @@ CREATE TABLE IF NOT EXISTS child_assessment_features (
   gender TEXT,
   session_timestamp TIMESTAMP DEFAULT now(),
 
-  test1_q1 FLOAT,
-  test1_q1_time BIGINT,
-  test1_q2 FLOAT,
-  test1_q2_time BIGINT,
-  test1_q3 FLOAT,
-  test1_q3_time BIGINT,
-  test1_q4 FLOAT,
-  test1_q4_time BIGINT,
-  test1_q5 FLOAT,
-  test1_q5_time BIGINT,
-  test1_q6 FLOAT,
-  test1_q6_time BIGINT,
+  test1_q1 FLOAT, test1_q1_time BIGINT,
+  test1_q2 FLOAT, test1_q2_time BIGINT,
+  test1_q3 FLOAT, test1_q3_time BIGINT,
+  test1_q4 FLOAT, test1_q4_time BIGINT,
+  test1_q5 FLOAT, test1_q5_time BIGINT,
+  test1_q6 FLOAT, test1_q6_time BIGINT,
 
   test2_audio1 TEXT,
   test2_audio2 TEXT,
 
   test3_image TEXT,
 
-  test4_q1 FLOAT,
-  test4_q1_time BIGINT,
-  test4_q2 FLOAT,
-  test4_q2_time BIGINT,
-  test4_q3 FLOAT,
-  test4_q3_time BIGINT,
-  test4_q4 FLOAT,
-  test4_q4_time BIGINT,
+  test4_q1 FLOAT, test4_q1_time BIGINT,
+  test4_q2 FLOAT, test4_q2_time BIGINT,
+  test4_q3 FLOAT, test4_q3_time BIGINT,
+  test4_q4 FLOAT, test4_q4_time BIGINT,
 
-  test5_q1_r1 BIGINT,
-  test5_q1_r2 BIGINT,
-  test5_q1_r3 BIGINT,
-  test5_q1_r4 BIGINT,
-  test5_q1_r5 BIGINT,
+  test5_q1_r1 BIGINT, test5_q1_r2 BIGINT, test5_q1_r3 BIGINT,
+  test5_q1_r4 BIGINT, test5_q1_r5 BIGINT,
+  test5_q2_time BIGINT, test5_q2_score BIGINT,
+  test5_q3_time BIGINT, test5_q3_score BIGINT,
 
-  test5_q2_time BIGINT,
-  test5_q2_score BIGINT,
-
-  test5_q3_time BIGINT,
-  test5_q3_score BIGINT,
-
-  test6_q1_time BIGINT,
-  test6_q1_score BIGINT,
-
-  test6_q2_time BIGINT,
-  test6_q2_score BIGINT,
-
-  test6_q3_time BIGINT,
-  test6_q3_score BIGINT,
-
-  test6_q4_time BIGINT,
-  test6_q4_score BIGINT,
+  test6_q1_time BIGINT, test6_q1_score BIGINT,
+  test6_q2_time BIGINT, test6_q2_score BIGINT,
+  test6_q3_time BIGINT, test6_q3_score BIGINT,
+  test6_q4_time BIGINT, test6_q4_score BIGINT,
 
   report_url TEXT,
   video_link TEXT,
-  detected_disabilities TEXT
+  detected_disabilities TEXT,
+  disabilities JSONB DEFAULT '[]'
 );
 
+-- ─── Students (managed by teachers) ──────────────────────────────────────────
+-- Keeps assessment tracking directly on the student record,
+-- while referral logistics live in the separate referrals table.
+CREATE TABLE IF NOT EXISTS students (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
 
+  -- Which teacher owns this student record
+  teacher_id UUID REFERENCES users(id) ON DELETE SET NULL,
+
+  -- Linked parent/user account (set after they register via referral)
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+
+  -- Assessment fields kept here as requested
+  referral_assessment_type TEXT,   -- e.g. 'dyslexia', 'adhd'
+  assessment_status TEXT DEFAULT 'not_started'
+    CHECK (assessment_status IN ('not_started', 'in_progress', 'completed')),
+  assessment_id UUID REFERENCES child_assessment_features(id) ON DELETE SET NULL,
+
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE (email, teacher_id)       -- same student can't be added twice by same teacher
+);
+
+-- ─── Referrals ────────────────────────────────────────────────────────────────
+-- Separate table for managing invitation links securely.
+-- One referral per (student, assessment type) assignment event.
+CREATE TABLE IF NOT EXISTS referrals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+  -- Cryptographically random token embedded in the invitation link
+  code TEXT UNIQUE NOT NULL DEFAULT encode(gen_random_bytes(24), 'hex'),
+
+  -- What assessment this referral is for
+  assessment_type TEXT NOT NULL,
+
+  -- Lifecycle tracking
+  status TEXT DEFAULT 'pending'
+    CHECK (status IN ('pending', 'registered', 'started', 'completed')),
+  sent_at TIMESTAMP DEFAULT NOW(),
+  registered_at TIMESTAMP,   -- when the parent/student registered via this link
+  completed_at TIMESTAMP,    -- when the assessment was completed
+
+  expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '30 days')
+);
+
+-- ─── Notes (unified) ─────────────────────────────────────────────────────────
+-- Single table for all note types. author_role distinguishes the source.
+-- Role-based access enforced at the API layer:
+--   teacher  → can INSERT where student is in their class; can SELECT own notes
+--   parent   → can INSERT/SELECT for their own child only
+--   doctor   → can INSERT/SELECT for students where they have an accepted doctor_request
+CREATE TABLE IF NOT EXISTS notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  author_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  author_role TEXT NOT NULL
+    CHECK (author_role IN ('teacher', 'parent', 'doctor', 'psychologist')),
+  content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ─── Doctor Requests ──────────────────────────────────────────────────────────
+-- Parents request a consultation from a specific doctor.
+-- Once accepted, doctor gains read/write access to that student's data.
+CREATE TABLE IF NOT EXISTS doctor_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  parent_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  doctor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'pending'
+    CHECK (status IN ('pending', 'accepted', 'rejected')),
+  created_at TIMESTAMP DEFAULT NOW(),
+  responded_at TIMESTAMP,
+  UNIQUE (student_id, doctor_id)   -- one request per student-doctor pair
+);
+
+-- ─── Notify trigger (existing) ───────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_neurobloom()
 RETURNS trigger AS $$
 BEGIN
