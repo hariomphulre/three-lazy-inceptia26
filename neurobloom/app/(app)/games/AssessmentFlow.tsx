@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from 'react';
-import LegacyDashboard from "@/components/LegacyDashboard";
+import LegacyDashboard from '@/components/LegacyDashboard';
 import { StudentForm, StudentData } from './StudentForm';
 import { TermsAndConditions } from './TermsAndConditions';
 import { PermissionsScreen } from './PermissionsScreen';
+import { FaceCaptureScreen } from './FaceCaptureScreen';
 import { ContinuousAssessment } from './ContinuousAssessment';
 import { TestComplete } from './TestComplete';
 
-type FlowStep = 'dashboard' | 'form' | 'terms' | 'permissions' | 'assessment' | 'complete';
+type FlowStep = 'dashboard' | 'form' | 'terms' | 'permissions' | 'face-capture' | 'assessment' | 'complete';
 
 export function AssessmentFlow() {
   // Start directly at the student form. The old 'dashboard' start step caused a
@@ -30,7 +31,13 @@ export function AssessmentFlow() {
   };
 
   const handlePermissionsComplete = () => {
-    setCurrentStep('assessment');
+    // FIX 1: Route to face-capture after permissions are granted
+    setCurrentStep('face-capture');
+  };
+
+  const handleFaceCaptureComplete = () => {
+    // This correctly routes to the assessment after face is captured
+    setCurrentStep('assessment'); 
   };
 
   const handleAssessmentComplete = async () => {
@@ -49,6 +56,8 @@ export function AssessmentFlow() {
     } catch (e) {
       console.warn('Could not update assessment status:', e);
     }
+    
+    // FIX 2: Route to complete screen when test is done
     setCurrentStep('complete');
   };
 
@@ -81,6 +90,13 @@ export function AssessmentFlow() {
         <PermissionsScreen
           onComplete={handlePermissionsComplete}
           onBack={() => setCurrentStep('terms')}
+        />
+      )}
+
+      {currentStep === 'face-capture' && (
+        <FaceCaptureScreen
+          onComplete={handleFaceCaptureComplete}
+          onBack={() => setCurrentStep('permissions')}
         />
       )}
 

@@ -7,6 +7,7 @@ import { useVideo } from "@/context/VideoContext";
 import { useTranslation } from "@/hooks/useTranslation";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
+import { createSession } from "@/lib/offline/session";
 
 interface StudentFormProps {
   onNext: (data: StudentData) => void;
@@ -27,6 +28,8 @@ export function StudentForm({ onNext, onBack }: StudentFormProps) {
     age: 6,
     gender: '',
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   // When the parent reached here via a teacher's referral, the child's name is
@@ -73,18 +76,27 @@ export function StudentForm({ onNext, onBack }: StudentFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate() || isSubmitting) return;
 
+    setIsSubmitting(true);
+    setSubmitError(null);
     const res = await fetch("/api/session/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...formData, studentId: linkedStudentId || undefined })
     });
 
-    const { sessionId } = await res.json();
-    localStorage.setItem("sessionId", sessionId);
-    setSessionId(sessionId);
-    onNext(formData);
+    try {
+      // Offline-first: create local UUID session immediately, sync when online
+      const sessionId = await createSession(formData);
+      setSessionId(sessionId);
+      onNext(formData);
+    } catch (error) {
+      console.error("❌ Failed to create session:", error);
+      setSubmitError("Could not start the assessment. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
     return (
@@ -205,12 +217,19 @@ export function StudentForm({ onNext, onBack }: StudentFormProps) {
                 <Button
                   type="submit"
                   size="lg"
+                  disabled={isSubmitting}
                   className="py-8 px-10 text-lg uppercase italic shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
                 >
-                  {t('sf_launch')}
+                  {isSubmitting ? "Starting..." : t('sf_launch')}
                   <ArrowRight size={20} className="ml-2" />
                 </Button>
               </div>
+
+              {submitError && (
+                <div className="mt-4 border-2 border-primary bg-primary/10 p-3 text-sm font-bold text-black">
+                  {submitError}
+                </div>
+              )}
             </form>
           </div>
   

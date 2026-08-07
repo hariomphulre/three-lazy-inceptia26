@@ -178,22 +178,60 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
   };
 
   const handleRequestDoctor = async () => {
-    if (!student || !selectedDoctorId) return;
+    if (!selectedDoctorId) return;
     setRequestError("");
     setRequestSubmitting(true);
     try {
       const res = await fetch("/api/doctor-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId: student.id, doctorId: selectedDoctorId }),
+        body: JSON.stringify({
+          ...(student?.id ? { studentId: student.id } : {}),
+          doctorId: selectedDoctorId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setRequestError(data.error || t("pd_err_send_request")); return; }
       setShowRequestModal(false);
       setSelectedDoctorId("");
       fetchDoctorRequests();
+      // Refresh profile in case a student record was auto-created
+      if (!student) fetchProfile();
     } finally { setRequestSubmitting(false); }
   };
+
+  const doctorRequestsBlock = (
+    <div className="mt-6 pt-4 border-t-2 border-black/10">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] font-black uppercase tracking-widest text-black/40 flex items-center gap-1">
+          <Stethoscope size={12} /> Psychologist Requests
+        </p>
+        <button
+          onClick={() => { setShowRequestModal(true); setRequestError(""); setSelectedDoctorId(""); }}
+          className="flex items-center gap-1 px-3 py-1.5 bg-[#9C27B0] text-white border-2 border-black text-[10px] font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
+        >
+          <Plus size={10} /> Connect
+        </button>
+      </div>
+      {doctorRequests.length === 0 ? (
+        <p className="text-[11px] font-black uppercase text-black/20 italic">No requests sent</p>
+      ) : (
+        <div className="space-y-2">
+          {doctorRequests.map(req => (
+            <div key={req.id} className="flex items-center justify-between border-2 border-black p-2 bg-muted">
+              <div>
+                <p className="text-[11px] font-black text-black uppercase">{req.doctor_name}</p>
+                <p className="text-[9px] text-black/40 font-bold">{req.doctor_email}</p>
+              </div>
+              <span className={`px-2 py-0.5 border border-black text-[9px] font-black uppercase ${STATUS_CONFIG[req.status]?.cls || ""}`}>
+                {req.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   if (profileLoading) {
     return (
@@ -267,24 +305,45 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
 
           {/* No student linked */}
           {!student ? (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center justify-center py-24 border-4 border-dashed border-black/20 max-w-lg mx-auto text-center"
-            >
-              <Heart size={56} className="text-primary mb-4" />
-              <h2 className="text-2xl font-black uppercase italic text-black mb-3">{t("pd_no_child_title")}</h2>
-              <p className="text-sm font-bold text-black/50 leading-relaxed">
-                {t("pd_no_child_desc")}
-              </p>
-              <p className="text-xs font-black uppercase tracking-widest text-black/30 mt-6 mb-3">{t("pd_no_child_or")}</p>
-              <button
-                onClick={() => startAssessment()}
-                className="flex items-center gap-2 px-6 py-4 bg-[#43B047] text-white border-4 border-black font-black uppercase tracking-widest text-sm shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 transition-all"
+            <div className="max-w-lg mx-auto space-y-6">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center justify-center py-16 border-4 border-dashed border-black/20 text-center"
               >
-                <Play size={16} /> {t("pd_start_assessment")}
-              </button>
-            </motion.div>
+                <Heart size={56} className="text-primary mb-4" />
+                <h2 className="text-2xl font-black uppercase italic text-black mb-3">No Child Linked Yet</h2>
+                <p className="text-sm font-bold text-black/50 leading-relaxed px-4">
+                  You can start an assessment now without waiting for teacher assignment. Linking with a teacher is optional and can be done later.
+                </p>
+                <a
+                  href="/assessment"
+                  className="mt-5 inline-flex items-center gap-2 px-5 py-3 bg-primary text-white border-4 border-black font-black uppercase tracking-widest text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+                >
+                  <Play size={14} />
+                  Start Test Now
+                </a>
+              </motion.div>
+
+              {/* Doctor connect — always available, even without a teacher */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.07 }}
+                className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
+              >
+                <div className="h-2 bg-[#9C27B0]" />
+                <div className="p-6">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-black/40 mb-1 flex items-center gap-2">
+                    <Stethoscope size={14} /> Connect with a Doctor
+                  </h3>
+                  <p className="text-[11px] font-bold text-black/40 mb-2">
+                    Request a psychologist consultation anytime — no teacher link required.
+                  </p>
+                  {doctorRequestsBlock}
+                </div>
+              </motion.div>
+            </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* SECTION 1 — Child Info */}
@@ -396,54 +455,8 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                     <p className="text-sm font-black uppercase text-black/30 italic">{t("pd_no_teacher")}</p>
                   )}
 
-                </div>
-              </motion.div>
-
-              {/* SECTION 3 — Specialist Support (doctor / psychologist requests) */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="lg:col-span-2 bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
-              >
-                <div className="h-2 bg-[#9C27B0]" />
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-black/40 flex items-center gap-2">
-                      <Stethoscope size={14} /> {t("pd_specialist_support")}
-                    </h3>
-                    <button
-                      onClick={() => { setShowRequestModal(true); setRequestError(""); setSelectedDoctorId(""); }}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-[#9C27B0] text-white border-2 border-black text-[11px] font-black uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
-                    >
-                      <Plus size={12} /> {t("pd_request_doctor")}
-                    </button>
-                  </div>
-                  <p className="text-[11px] font-bold text-black/50 mb-4 leading-relaxed">
-                    {t("pd_specialist_desc")}
-                  </p>
-                  {doctorRequests.length === 0 ? (
-                    <div className="border-4 border-dashed border-black/15 py-8 text-center">
-                      <p className="text-[11px] font-black uppercase text-black/25 italic">{t("pd_no_requests")}</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {doctorRequests.map(req => (
-                        <div key={req.id} className="flex items-center justify-between border-2 border-black p-3 bg-muted">
-                          <div className="min-w-0">
-                            <p className="text-[12px] font-black text-black uppercase truncate">{req.doctor_name}</p>
-                            <p className="text-[10px] text-black/40 font-bold truncate">{req.doctor_email}</p>
-                            {req.student_name && (
-                              <p className="text-[9px] font-black text-primary uppercase truncate">{t("pd_for")} {req.student_name}</p>
-                            )}
-                          </div>
-                          <span className={`ml-2 shrink-0 px-2 py-0.5 border border-black text-[9px] font-black uppercase ${STATUS_CLS[req.status] || ""}`}>
-                            {statusLabel(req.status)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {/* Doctor requests — available whether or not a teacher is assigned */}
+                  {doctorRequestsBlock}
                 </div>
               </motion.div>
 
@@ -508,7 +521,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
 
       {/* ── REQUEST DOCTOR MODAL ── */}
       <AnimatePresence>
-        {showRequestModal && student && (
+        {showRequestModal && (
           <>
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setShowRequestModal(false)} />
             <motion.div
@@ -520,50 +533,42 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
               <div className="w-full max-w-lg bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
                 <div className="bg-[#9C27B0] p-6 border-b-4 border-black flex items-center justify-between">
                   <div>
-                    <h2 className="text-xl font-black text-white uppercase tracking-tight">{t("pd_request_psychologist")}</h2>
-                    <p className="text-[11px] font-black text-white/70 uppercase mt-1">{t("pd_for")} {student.name}</p>
+                    <h2 className="text-xl font-black text-white uppercase tracking-tight">Connect with Doctor</h2>
+                    <p className="text-[11px] font-black text-white/70 uppercase mt-1">
+                      {student ? `For: ${student.name}` : "No teacher link required"}
+                    </p>
                   </div>
                   <button onClick={() => setShowRequestModal(false)} className="text-white"><X size={20} /></button>
                 </div>
-                <div className="p-6 space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-black/60">{t("pd_select_specialist")}</p>
-
-                  {doctorsLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <RefreshCw className="animate-spin text-[#9C27B0]" size={22} />
-                    </div>
-                  ) : doctors.length === 0 ? (
-                    <div className="border-4 border-dashed border-black/15 py-8 px-4 text-center">
-                      <Stethoscope size={28} className="text-black/20 mx-auto mb-2" />
-                      <p className="text-[11px] font-black uppercase text-black/40">{t("pd_no_specialists")}</p>
-                      <p className="text-[10px] font-bold text-black/30 mt-1">{t("pd_no_specialists_desc")}</p>
-                    </div>
+                <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-black/60">Select a Specialist</p>
+                  {doctors.length === 0 ? (
+                    <p className="text-sm font-black uppercase text-black/30 italic py-4 text-center">
+                      No doctors available yet
+                    </p>
                   ) : (
-                    <div className="space-y-3 max-h-[45vh] overflow-y-auto">
-                      {doctors.map((doc, i) => {
-                        const color = DOCTOR_COLORS[i % DOCTOR_COLORS.length];
-                        const selected = selectedDoctorId === doc.id;
-                        return (
-                          <button
-                            key={doc.id}
-                            onClick={() => setSelectedDoctorId(doc.id)}
-                            className={`w-full flex items-center gap-4 p-3 border-4 border-black text-left transition-all ${selected ? "shadow-none translate-x-1 translate-y-1" : "shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:translate-x-0.5 hover:translate-y-0.5"}`}
-                            style={{ backgroundColor: selected ? color : "white" }}
-                          >
-                            <div className="w-10 h-10 border-2 border-black flex items-center justify-center text-white font-black flex-shrink-0" style={{ backgroundColor: color }}>
-                              {doc.name.split(" ").filter(Boolean).pop()?.substring(0, 2).toUpperCase()}
-                            </div>
-                            <div className="min-w-0">
-                              <p className={`font-black text-sm uppercase tracking-tight truncate ${selected ? "text-white" : "text-black"}`}>{doc.name}</p>
-                              <p className={`text-[10px] font-bold truncate ${selected ? "text-white/70" : "text-black/50"}`}>{doc.email}</p>
-                            </div>
-                            {selected && <Check size={18} className="ml-auto text-white flex-shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    doctors.map((doc, i) => {
+                      const color = DOCTOR_COLORS[i % DOCTOR_COLORS.length];
+                      const selected = selectedDoctorId === doc.id;
+                      return (
+                        <button
+                          key={doc.id}
+                          onClick={() => setSelectedDoctorId(doc.id)}
+                          className={`w-full flex items-center gap-4 p-3 border-4 border-black text-left transition-all ${selected ? "shadow-none translate-x-1 translate-y-1" : "shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:translate-x-0.5 hover:translate-y-0.5"}`}
+                          style={{ backgroundColor: selected ? color : "white" }}
+                        >
+                          <div className="w-10 h-10 border-2 border-black flex items-center justify-center text-white font-black flex-shrink-0" style={{ backgroundColor: color }}>
+                            {doc.name.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className={`font-black text-sm uppercase tracking-tight ${selected ? "text-white" : "text-black"}`}>{doc.name}</p>
+                            <p className={`text-[10px] font-bold uppercase ${selected ? "text-white/70" : "text-black/50"}`}>{doc.email}</p>
+                          </div>
+                          {selected && <Check size={18} className="ml-auto text-white" />}
+                        </button>
+                      );
+                    })
                   )}
-
                   {requestError && (
                     <p className="text-[11px] font-black text-[#E52521] uppercase">{requestError}</p>
                   )}
