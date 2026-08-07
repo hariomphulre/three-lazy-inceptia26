@@ -4,6 +4,7 @@ import "./globals.css";
 import { VideoProvider } from "@/context/VideoContext";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { CameraPreview } from "@/components/CameraPreview";
+import { AuthProvider } from "@/context/AuthContext";
 
 const fontSans = DM_Sans({
   subsets: ["latin"],
@@ -36,13 +37,15 @@ export default function RootLayout({
       <body
         className={`${fontSans.variable} ${fontSerif.variable} ${fontMono.variable} antialiased`}
       >
-        <LanguageProvider>
-          {/*GLOBAL VIDEO RECORDER CONTEXT */}
-          <VideoProvider>
-            {children}
-            <CameraPreview />
-          </VideoProvider>
-        </LanguageProvider>
+        <AuthProvider>
+          <LanguageProvider>
+            {/*GLOBAL VIDEO RECORDER CONTEXT */}
+            <VideoProvider>
+              {children}
+              <CameraPreview />
+            </VideoProvider>
+          </LanguageProvider>
+        </AuthProvider>
       </body>
     </html>
   );
