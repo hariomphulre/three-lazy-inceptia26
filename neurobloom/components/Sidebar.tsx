@@ -37,6 +37,7 @@ function useNavItems(role: string) {
 
   const parentMain = [
     { icon: <LayoutDashboard size={20} />, label: "Dashboard", href: "/dashboard" },
+    { icon: <ClipboardList size={20} />, label: "Take Test", href: "/assessment" },
     { icon: <FileText size={20} />, label: "Reports", href: "/assessments" },
     { icon: <Stethoscope size={20} />, label: "Psychologists", href: "/psychologists" },
     { icon: <Compass size={20} />, label: t("nav_personalist") || "Paths", href: "/personalised-path" },

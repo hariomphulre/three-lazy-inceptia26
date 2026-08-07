@@ -19,7 +19,7 @@ export async function GET(req: Request) {
        s.referral_assessment_type, s.assessment_status, s.assessment_id,
        s.created_at,
        t.id AS teacher_id, t.name AS teacher_name, t.email AS teacher_email,
-       caf.report_url, caf.detected_disabilities, caf.disabilities,
+       caf.report_url, caf.detected_disabilities,
        caf.session_timestamp AS assessment_date
      FROM students s
      LEFT JOIN users t ON t.id = s.teacher_id

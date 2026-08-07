@@ -20,7 +20,7 @@ export async function GET(req: Request) {
        t.name AS teacher_name, t.email AS teacher_email,
        u.name AS parent_name, u.email AS parent_email,
        dr.id AS request_id, dr.status AS request_status, dr.created_at AS request_date,
-       caf.report_url, caf.detected_disabilities, caf.disabilities,
+       caf.report_url, caf.detected_disabilities,
        caf.session_timestamp AS assessment_date
      FROM doctor_requests dr
      JOIN students s ON s.id = dr.student_id

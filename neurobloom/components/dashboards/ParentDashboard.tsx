@@ -275,7 +275,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
               <Heart size={56} className="text-primary mb-4" />
               <h2 className="text-2xl font-black uppercase italic text-black mb-3">No Child Linked Yet</h2>
               <p className="text-sm font-bold text-black/50 leading-relaxed">
-                Your account isn't linked to any student profile. Ask your child's teacher to send an assessment invite, then use the link from that email to register — it will automatically connect your account.
+                You can start an assessment now without waiting for teacher assignment. Linking with a teacher is optional and can be done later.
               </p>
               <p className="text-xs font-black uppercase tracking-widest text-black/30 mt-6 mb-3">— or start one right now —</p>
               <button
