@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { motion } from "framer-motion";
 import { Upload, Check, Loader2 } from 'lucide-react';
 import { useTranslation } from "@/hooks/useTranslation";
-import { saveWritingImage } from "@/lib/offline/session";
 
 interface Level3Props {
   onComplete: () => void;
@@ -38,9 +37,27 @@ export function Level3WritingWizard({ onComplete, onProgress, phase = 0 }: Level
     setIsUploading(true);
 
     try {
-      // Stored locally then uploaded to Cloudinary (immediately if online,
-      // otherwise on the next sync). Works offline.
-      await saveWritingImage(file);
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!data.url) throw new Error(data.error || "Upload failed");
+
+      const sessionId = localStorage.getItem("sessionId");
+      await fetch("/api/session/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          payload: { test3_image: data.url }
+        })
+      });
+
     } catch (error) {
       console.error("Error saving image:", error);
       alert(t('game_w1_error'));

@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import { Mic, Square } from 'lucide-react';
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
-import { saveAudio } from "@/lib/offline/session";
 
 
 interface Level2Props {
@@ -52,13 +51,37 @@ export function Level2ReadingRocket({ onComplete, onProgress }: Level2Props) {
         setIsSaving(true);
         const audioBlob = new Blob(audioChunks.current, { type: "audio/webm" });
 
+        const formData = new FormData();
+        formData.append("file", audioBlob, "reading.webm");
+
         try {
-          // Stored locally then uploaded to Cloudinary (immediately if online,
-          // otherwise on the next sync). Works offline.
-          await saveAudio(
-            audioBlob,
-            currentGame === 0 ? "test2_audio1" : "test2_audio2"
-          );
+          const upload = await fetch("/api/upload", {
+            method: "POST",
+            body: formData
+          });
+
+          const uploadRes = await upload.json();
+          const url = uploadRes.url;
+
+          if (!url) {
+            console.error("Upload failed:", uploadRes.error);
+            setIsSaving(false);
+            setIsRecording(false);
+            return;
+          }
+
+          const sessionId = localStorage.getItem("sessionId");
+          await fetch("/api/session/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId,
+              payload: currentGame === 0
+                ? { test2_audio1: url }
+                : { test2_audio2: url }
+            })
+          });
+
           setHasRecorded(true);
         } catch (error) {
           console.error("Process failed:", error);

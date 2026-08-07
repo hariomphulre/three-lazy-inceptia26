@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from "framer-motion";
 import { Volume2, Check, X, Headphones, Play } from 'lucide-react';
 import { useTranslation } from "@/hooks/useTranslation";
-import { saveSession } from "@/lib/offline/session";
 import { Button } from '@/components/ui/button';
 
 interface Level5Props {
@@ -64,12 +63,17 @@ export function Level5SuperEars({ onComplete, onProgress }: Level5Props) {
 
     const score = isCorrect ? 1 : 0;
     const timeTaken = Math.floor((Date.now() - questionStartTime.current) / 1000);
+    const sessionId = localStorage.getItem("sessionId");
 
     const payload = currentGame === 1
         ? { test5_q2_score: score, test5_q2_time: timeTaken }
         : { test5_q3_score: score, test5_q3_time: timeTaken };
 
-    await saveSession(payload);
+    await fetch("/api/session/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, payload })
+    });
 
     setTimeout(() => {
       setFeedback(null);
@@ -116,13 +120,21 @@ export function Level5SuperEars({ onComplete, onProgress }: Level5Props) {
             backgroundNoiseAudio.current.currentTime = 0;
           }
 
-          await saveSession({
+          const sessionId = localStorage.getItem("sessionId");
+          await fetch("/api/session/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId,
+              payload: {
                 test5_q1_r1: reactions.current[0] || null,
                 test5_q1_r2: reactions.current[1] || null,
                 test5_q1_r3: reactions.current[2] || null,
                 test5_q1_r4: reactions.current[3] || null,
                 test5_q1_r5: reactions.current[4] || null,
-              });
+              }
+            })
+          });
           setBeepActive(false);
           setBeepCount(0);
           setCurrentGame(1);

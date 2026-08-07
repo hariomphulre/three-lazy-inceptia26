@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from "framer-motion";
 import { Check, X, Star, Coins } from 'lucide-react';
 import { useTranslation } from "@/hooks/useTranslation";
-import { saveSession } from "@/lib/offline/session";
 import { Button } from '@/components/ui/button';
 
 
@@ -36,6 +35,7 @@ export function Level1MathAdventure({ onComplete, onProgress }: Level1Props) {
 
   const handleAnswer = async (isCorrect: boolean) => {
     const timeTaken = Math.floor((Date.now() - questionStartTime.current) / 1000);
+    const sessionId = localStorage.getItem("sessionId");
 
     const scoreValue = isCorrect ? 1 : 0;
 
@@ -48,7 +48,14 @@ export function Level1MathAdventure({ onComplete, onProgress }: Level1Props) {
       5: { test1_q6: scoreValue, test1_q6_time: timeTaken },
     };
 
-    await saveSession(payloadMap[currentGame]);
+    await fetch("/api/session/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        payload: payloadMap[currentGame]
+      })
+    });
 
     if (currentGame < 5) {
       setCurrentGame(currentGame + 1);

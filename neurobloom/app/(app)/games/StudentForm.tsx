@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { motion } from "framer-motion";
 import { User, Calendar, Users, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { useVideo } from "@/context/VideoContext";
-import { createSession } from "@/lib/offline/session";
 import { useTranslation } from "@/hooks/useTranslation";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
@@ -43,9 +42,14 @@ export function StudentForm({ onNext, onBack }: StudentFormProps) {
     e.preventDefault();
     if (!validate()) return;
 
-    // Generates a local UUID, stores it, and creates the server row if online.
-    // Works fully offline; the session syncs later.
-    const sessionId = await createSession(formData);
+    const res = await fetch("/api/session/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formData)
+    });
+
+    const { sessionId } = await res.json();
+    localStorage.setItem("sessionId", sessionId);
     setSessionId(sessionId);
     onNext(formData);
   };

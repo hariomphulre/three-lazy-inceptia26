@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
@@ -10,7 +10,7 @@ CREATE TABLE users (
 );
 
 
-CREATE TABLE child_assessment_features (
+CREATE TABLE IF NOT EXISTS child_assessment_features (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   child_name TEXT NOT NULL,
   age INT NOT NULL,
@@ -82,6 +82,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS new_child_trigger ON child_assessment_features;
 CREATE TRIGGER new_child_trigger
 AFTER INSERT ON child_assessment_features
 FOR EACH ROW

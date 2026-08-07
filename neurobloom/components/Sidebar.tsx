@@ -2,16 +2,15 @@
 
 import React from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import {
+import { usePathname } from "next/navigation";
+import { 
   Activity,
   LayoutDashboard,
   FileText,
   Stethoscope,
   Settings,
   HelpCircle,
-  Compass,
-  LogOut
+  Compass
 } from 'lucide-react';
 import { useTranslation } from "@/hooks/useTranslation";
 
@@ -83,65 +82,11 @@ function MobileNavItem({ icon, label, href, active = false }: {
   );
 }
 
-// ─── Desktop Logout Button ───────────────────────────────────────────────────
-// Same look as DesktopNavItem, but it's an action button (not a link).
-function DesktopLogoutButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="w-full">
-      <div className="
-        flex items-center gap-4 px-4 py-3 border-2 border-black transition-all group cursor-pointer
-        text-black hover:bg-red-500 hover:text-white shadow-none
-        hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px]
-      ">
-        <span className="text-black group-hover:text-white group-hover:scale-110 transition-transform">
-          <LogOut size={20} />
-        </span>
-        <span className="hidden lg:block text-sm uppercase tracking-widest font-bold">
-          {label}
-        </span>
-      </div>
-    </button>
-  );
-}
-
-// ─── Mobile Logout Button ────────────────────────────────────────────────────
-function MobileLogoutButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="flex-1">
-      <div className="flex flex-col items-center justify-center gap-1 py-2 px-1 transition-all text-black/40 hover:text-red-500">
-        <div className="p-1.5 transition-all">
-          <LogOut size={20} />
-        </div>
-        <span className="text-[9px] font-black uppercase tracking-widest leading-none truncate max-w-[56px] text-center">
-          {label}
-        </span>
-      </div>
-    </button>
-  );
-}
-
 // ─── Main Sidebar Export ─────────────────────────────────────────────────────
 export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { t } = useTranslation();
   const { main, bottom } = useNavItems();
   const allItems = [...main, ...bottom];
-  const logoutLabel = t("nav_logout") || "Logout";
-
-  const handleLogout = async () => {
-    try {
-      // Clears the httpOnly auth cookie on the server.
-      await fetch("/api/auth/logout", { method: "POST" });
-    } catch {
-      // Even if the request fails, still clear local state and redirect.
-    }
-    localStorage.removeItem("token");
-    localStorage.removeItem("userName");
-    // Return to the base URL.
-    router.push("/");
-    router.refresh();
-  };
 
   return (
     <>
@@ -181,7 +126,6 @@ export function Sidebar() {
               active={pathname === item.href}
             />
           ))}
-          <DesktopLogoutButton label={logoutLabel} onClick={handleLogout} />
         </div>
       </aside>
 
@@ -196,7 +140,6 @@ export function Sidebar() {
             active={pathname === item.href}
           />
         ))}
-        <MobileLogoutButton label={logoutLabel} onClick={handleLogout} />
       </nav>
 
       {/* ── MOBILE: Bottom padding spacer so page content isn't hidden behind nav ── */}

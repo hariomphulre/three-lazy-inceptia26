@@ -153,17 +153,16 @@ export function LoginPage() {
                 </div>
               </form>
   
-              <div className="mt-12 pt-8 border-t-4 border-black text-center space-y-4">
+              <div className="mt-12 pt-8 border-t-4 border-black text-center">
                 <p className="text-black/40 text-xs font-black uppercase tracking-widest">
-                  {t("login_new_practitioner")}
+                  {t("login_new_practitioner")}{" "}
+                  <button
+                    onClick={() => router.push("/signup")}
+                    className="text-secondary font-black hover:underline"
+                  >
+                    {t("login_request_access")}
+                  </button>
                 </p>
-                <button
-                  type="button"
-                  onClick={() => router.push("/signup")}
-                  className="w-full py-4 bg-white text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-y-1 font-black text-sm uppercase tracking-widest hover:bg-secondary hover:text-white hover:translate-y-[-2px] transition-all"
-                >
-                  {t("login_request_access")}
-                </button>
               </div>
             </div>
           </div>

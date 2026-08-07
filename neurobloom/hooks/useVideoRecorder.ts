@@ -2,15 +2,14 @@
 
 import { useRef, useState } from "react";
 import { getCameraStream, stopCameraStream } from "@/lib/cameraManager";
-import { saveVideo } from "@/lib/offline/session";
 
 export function useVideoRecorder() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const sessionIdRef = useRef<string | null>(null);
+  const sessionIdRef = useRef<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
 
-  const setSessionId = (id: string) => {
+  const setSessionId = (id: number) => {
     sessionIdRef.current = id;
   };
 
@@ -60,10 +59,20 @@ export function useVideoRecorder() {
 
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
 
-      // Stored locally then uploaded via /api/session/upload (immediately if
-      // online, otherwise on the next sync). Works offline.
-      await saveVideo(blob, sessionIdRef.current);
-      console.log("🎞️ Video queued/uploaded for session", sessionIdRef.current);
+      const formData = new FormData();
+      formData.append("file", blob);
+
+      console.log("🚀 Calling /api/session/upload");
+
+      const res = await fetch("/api/session/upload", {
+        method: "POST",
+        headers: {
+          "x-session-id": sessionIdRef.current.toString(),
+        },
+        body: formData,
+      });
+
+      console.log("✅ Upload response:", await res.json());
     };
 
     recorder.stop();

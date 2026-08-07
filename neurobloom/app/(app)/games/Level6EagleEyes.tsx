@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from "framer-motion";
 import { Check, X } from 'lucide-react';
 import { useTranslation } from "@/hooks/useTranslation";
-import { saveSession } from "@/lib/offline/session";
 import { Button } from "@/components/ui/button";
 
 interface Level6Props {
@@ -34,6 +33,7 @@ export function Level6EagleEyes({ onComplete, onProgress }: Level6Props) {
   const handleAnswer = async (isCorrect: boolean, answerIndex?: number) => {
     const score = isCorrect ? 1 : 0;
     const timeTaken = Math.floor((Date.now() - questionStartTime.current) / 1000);
+    const sessionId = localStorage.getItem("sessionId");
 
     setSelectedAnswer(answerIndex ?? null);
 
@@ -44,7 +44,14 @@ export function Level6EagleEyes({ onComplete, onProgress }: Level6Props) {
       3: { test6_q4_score: score, test6_q4_time: timeTaken },
     };
 
-    await saveSession(payloadMap[currentGame]);
+    await fetch("/api/session/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        payload: payloadMap[currentGame]
+      })
+    });
 
     setTimeout(() => {
       setFeedback(null);

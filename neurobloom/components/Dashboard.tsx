@@ -102,7 +102,7 @@ export default function Dashboard({ onStartTest }: DashboardProps) {
                 animate={{ opacity: 1, y: 0 }}
                 className="text-2xl sm:text-3xl font-black text-black uppercase italic tracking-tighter truncate"
               >
-                Hello, <span className="text-primary" suppressHydrationWarning>{userName}</span>
+                Hello, <span className="text-primary">{userName}</span>
               </motion.h1>
               <p className="text-xs sm:text-sm font-black text-black/40 mt-1 uppercase tracking-widest">
                 Welcome back to your diagnostic terminal

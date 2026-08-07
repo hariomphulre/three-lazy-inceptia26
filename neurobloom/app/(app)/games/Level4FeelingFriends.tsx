@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, X } from 'lucide-react';
 import { useTranslation } from "@/hooks/useTranslation";
-import { saveSession } from "@/lib/offline/session";
 
 interface Level4Props {
   onComplete: () => void;
@@ -63,6 +62,7 @@ export function Level4FeelingFriends({ onComplete, onProgress }: Level4Props) {
     const isCorrect = faceIndex === currentEmotion.correctIndex;
     const score = isCorrect ? 1 : 0;
     const timeTaken = Math.floor((Date.now() - questionStartTime.current) / 1000);
+    const sessionId = localStorage.getItem("sessionId");
 
     setSelectedFace(faceIndex);
     
@@ -75,7 +75,14 @@ export function Level4FeelingFriends({ onComplete, onProgress }: Level4Props) {
     };
 
     try {
-      await saveSession(payloadMap[currentGame]);
+      await fetch("/api/session/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          payload: payloadMap[currentGame]
+        })
+      });
     } catch (error) {
       console.error("Failed to save progress:", error);
     }
