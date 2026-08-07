@@ -1,0 +1,12 @@
+.venv
+venv
+.env
+__pycache__/
+models/
+temp_videos/
+reports/
+utils/__pycache__/
+emotion_social_dataset.csv
+realistic_synthetic_dataset.csv
+test5_synthetic.csv
+test6_synthetic.csv
