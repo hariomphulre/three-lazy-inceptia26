@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from 'react';
-import LegacyDashboard from "@/components/LegacyDashboard";
+import LegacyDashboard from '@/components/LegacyDashboard';
 import { StudentForm, StudentData } from './StudentForm';
 import { TermsAndConditions } from './TermsAndConditions';
 import { PermissionsScreen } from './PermissionsScreen';
+import { FaceCaptureScreen } from './FaceCaptureScreen';
 import { ContinuousAssessment } from './ContinuousAssessment';
 import { TestComplete } from './TestComplete';
 
-type FlowStep = 'dashboard' | 'form' | 'terms' | 'permissions' | 'assessment' | 'complete';
+type FlowStep = 'dashboard' | 'form' | 'terms' | 'permissions' | 'face-capture' | 'assessment' | 'complete';
 
 export function AssessmentFlow() {
   const [currentStep, setCurrentStep] = useState<FlowStep>('dashboard');
@@ -47,8 +48,16 @@ export function AssessmentFlow() {
     } catch (e) {
       console.warn('Could not update assessment status:', e);
     }
-    setCurrentStep('complete');
+    setCurrentStep('face-capture');
   };
+
+  const handleFaceCaptureComplete = () => {
+    setCurrentStep('assessment');
+  };
+
+  // const handleAssessmentComplete = () => {
+  //   setCurrentStep('complete');
+  // };
 
   const handleReturnHome = () => {
     setCurrentStep('dashboard');
@@ -79,6 +88,13 @@ export function AssessmentFlow() {
         <PermissionsScreen
           onComplete={handlePermissionsComplete}
           onBack={() => setCurrentStep('terms')}
+        />
+      )}
+
+      {currentStep === 'face-capture' && (
+        <FaceCaptureScreen
+          onComplete={handleFaceCaptureComplete}
+          onBack={() => setCurrentStep('permissions')}
         />
       )}
 

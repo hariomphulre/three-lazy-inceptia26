@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type AlertType = "multiple-faces" | "no-face" | "distracted" | null;
 
@@ -10,235 +10,497 @@ interface FaceDetectionAlert {
   severity: "warning" | "error" | "info";
 }
 
-/**
- * Lightweight face detection using canvas pixel analysis
- * Detects face-like regions through skin tone pixel matching
- */
-const detectFacesSimple = (
-  canvas: OffscreenCanvas | HTMLCanvasElement,
-  ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D
-): number => {
-  try {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
+export interface FaceEmotionScore {
+  emotion: string;
+  score: number;
+}
 
-    // Detect skin-tone pixels using multiple criteria
-    let facePixels = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const a = data[i + 3];
+export interface FaceLiveStats {
+  faceCount: number;
+  recognitionConfidence: number | null;
+  recognized: boolean | null;
+  gender: string | null;
+  genderScore: number | null;
+  emotions: FaceEmotionScore[];
+}
 
-      // Skip transparent pixels
-      if (a < 128) continue;
+interface HumanFaceResult {
+  embedding?: number[] | Float32Array;
+  gender?: string;
+  genderScore?: number;
+  emotion?: FaceEmotionScore[];
+}
 
-      // Skin tone detection (works across different skin tones)
-      const isSkinTone =
-        r > 60 &&        // Relaxed red minimum
-        g > 20 &&        // Relaxed green minimum  
-        b > 10 &&        // Relaxed blue minimum
-        r > g &&         // Red > Green
-        r > b &&         // Red > Blue
-        Math.abs(r - g) > 10; // Relaxed R-G difference
+interface HumanDetectionResult {
+  face?: HumanFaceResult[];
+}
 
-      if (isSkinTone) {
-        facePixels++;
-      }
-    }
+interface HumanConfig {
+  backend: string;
+  modelBasePath: string;
+  face: {
+    enabled: boolean;
+    detector: { return: boolean; rotation: boolean };
+    mesh: { enabled: boolean };
+    description: { enabled: boolean };
+    emotion: { enabled: boolean };
+    iris: { enabled: boolean };
+  };
+  body: { enabled: boolean };
+  hand: { enabled: boolean };
+  gesture: { enabled: boolean };
+}
 
-    // Estimate face count based on skin pixel density
-    const totalPixels = canvas.width * canvas.height;
-    const skinRatio = facePixels / totalPixels;
-    const skinPercentage = (skinRatio * 100).toFixed(2);
+interface HumanInstance {
+  detect: (input: HTMLVideoElement) => Promise<HumanDetectionResult>;
+  draw: {
+    all: (canvas: HTMLCanvasElement, result: HumanDetectionResult) => void;
+  };
+  match: {
+    similarity: (embedding1: number[], embedding2: number[]) => number;
+  };
+  load?: () => Promise<void>;
+  warmup?: () => Promise<void>;
+}
 
-    // Log every 60 frames
-    if (Math.random() < 0.02) {
-      console.log(
-        `📊 Canvas: ${canvas.width}x${canvas.height} | Skin pixels: ${facePixels}/${totalPixels} | Density: ${skinPercentage}%`
-      );
-    }
+interface HumanGlobal {
+  Human: new (config: HumanConfig) => HumanInstance;
+}
 
-    // Adjusted thresholds for better detection
-    if (skinRatio > 0.25) {
-      console.log(`👥 MULTIPLE FACES DETECTED (${skinPercentage}%)`);
-      return 2;
-    }
-    if (skinRatio > 0.01) {
-      return 1; // Single face detected
-    }
-    return 0; // No face detected
-  } catch (error) {
-    console.error("Face detection error:", error);
-    return 0;
+declare global {
+  interface Window {
+    Human?: HumanGlobal;
   }
+}
+
+const HUMAN_SCRIPT = "https://cdn.jsdelivr.net/npm/@vladmandic/human/dist/human.js";
+const RECOGNITION_THRESHOLD = 0.6;
+const EMBEDDING_STORAGE_KEY = "faceRecognitionEmbedding";
+
+/** Exact config from /index.html */
+const HUMAN_CONFIG: HumanConfig = {
+  backend: "webgl",
+  modelBasePath: "https://vladmandic.github.io/human/models",
+  face: {
+    enabled: true,
+    detector: { return: true, rotation: true },
+    mesh: { enabled: true },
+    description: { enabled: true },
+    emotion: { enabled: true },
+    iris: { enabled: true },
+  },
+  body: { enabled: false },
+  hand: { enabled: false },
+  gesture: { enabled: false },
 };
+
+/** Shared across FaceCapture + CameraPreview (recording starts before enrollment) */
+let sharedRegisteredEmbedding: number[] | null = null;
+
+let humanScriptPromise: Promise<void> | null = null;
+
+function toNumberArray(embedding: number[] | Float32Array | unknown): number[] | null {
+  if (!embedding) return null;
+
+  if (Array.isArray(embedding)) {
+    return embedding.every((value) => typeof value === "number") ? embedding : null;
+  }
+
+  if (ArrayBuffer.isView(embedding)) {
+    return Array.from(embedding as unknown as ArrayLike<number>);
+  }
+
+  if (typeof embedding === "object") {
+    const values = Object.values(embedding as Record<string, unknown>);
+    if (values.length > 0 && values.every((value) => typeof value === "number")) {
+      return values as number[];
+    }
+  }
+
+  return null;
+}
+
+function readStoredEmbedding(): number[] | null {
+  if (typeof window === "undefined") return null;
+
+  const stored = window.localStorage.getItem(EMBEDDING_STORAGE_KEY);
+  if (!stored) return null;
+
+  try {
+    return toNumberArray(JSON.parse(stored));
+  } catch {
+    return null;
+  }
+}
+
+function getRegisteredEmbedding(): number[] | null {
+  if (sharedRegisteredEmbedding && sharedRegisteredEmbedding.length > 0) {
+    return sharedRegisteredEmbedding;
+  }
+
+  const stored = readStoredEmbedding();
+  if (stored && stored.length > 0) {
+    sharedRegisteredEmbedding = stored;
+    return stored;
+  }
+
+  return null;
+}
+
+function persistRegisteredEmbedding(embedding: number[] | Float32Array): number[] {
+  const normalized = toNumberArray(embedding);
+  if (!normalized || normalized.length === 0) {
+    throw new Error("Invalid face embedding");
+  }
+
+  sharedRegisteredEmbedding = normalized;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(EMBEDDING_STORAGE_KEY, JSON.stringify(normalized));
+  }
+  return normalized;
+}
+
+async function loadHumanLibrary() {
+  if (typeof window === "undefined") {
+    throw new Error("JS Face API can only run in the browser");
+  }
+
+  if (window.Human?.Human) {
+    return window.Human;
+  }
+
+  if (!humanScriptPromise) {
+    humanScriptPromise = new Promise((resolve, reject) => {
+      const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${HUMAN_SCRIPT}"]`);
+
+      if (existingScript) {
+        existingScript.addEventListener("load", () => resolve());
+        existingScript.addEventListener("error", () => reject(new Error("Failed to load JS Face API")));
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = HUMAN_SCRIPT;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load JS Face API"));
+      document.head.appendChild(script);
+    });
+  }
+
+  await humanScriptPromise;
+
+  if (!window.Human?.Human) {
+    throw new Error("JS Face API loaded but global Human was not found");
+  }
+
+  return window.Human;
+}
+
+function emptyLiveStats(): FaceLiveStats {
+  return {
+    faceCount: 0,
+    recognitionConfidence: null,
+    recognized: null,
+    gender: null,
+    genderScore: null,
+    emotions: [],
+  };
+}
 
 export function useFaceDetection(
   videoElement: HTMLVideoElement | null,
-  enabled: boolean = true
+  enabled: boolean = true,
+  showResults: boolean = true,
+  outputCanvas: HTMLCanvasElement | null = null,
+  enableAlerts: boolean = false
 ) {
   const [alert, setAlert] = useState<FaceDetectionAlert | null>(null);
   const [faceCount, setFaceCount] = useState(0);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [latestResult, setLatestResult] = useState<HumanDetectionResult | null>(null);
+  const [recognitionConfidence, setRecognitionConfidence] = useState<number | null>(null);
+  const [liveStats, setLiveStats] = useState<FaceLiveStats>(emptyLiveStats);
+  const humanRef = useRef<HumanInstance | null>(null);
   const detectionLoopRef = useRef<number | null>(null);
+  const detectionInFlightRef = useRef(false);
   const previousFaceCountRef = useRef(0);
   const noFaceCounterRef = useRef(0);
   const multipleWarningTimeRef = useRef<number>(0);
   const distractedCounterRef = useRef(0);
-  const frameCountRef = useRef(0);
+  const alertRef = useRef<FaceDetectionAlert | null>(null);
+  const showResultsRef = useRef(showResults);
+  const canvasRef = useRef<HTMLCanvasElement | null>(outputCanvas);
+  const enableAlertsRef = useRef(enableAlerts);
+  const videoElementRef = useRef<HTMLVideoElement | null>(videoElement);
 
-  // Initialize canvas on mount
   useEffect(() => {
-    if (!enabled) return;
+    alertRef.current = alert;
+  }, [alert]);
 
-    try {
-      const canvas = document.createElement("canvas");
-      canvas.width = 320;
-      canvas.height = 240;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  useEffect(() => {
+    showResultsRef.current = showResults;
+    canvasRef.current = outputCanvas;
+    enableAlertsRef.current = enableAlerts;
+    videoElementRef.current = videoElement;
 
-      if (ctx) {
-        canvasRef.current = canvas;
-        ctxRef.current = ctx;
-        console.log("✅ Face detection canvas initialized");
-      }
-    } catch (error) {
-      console.error("❌ Failed to initialize canvas:", error);
+    if (!showResults && outputCanvas) {
+      const ctx = outputCanvas.getContext("2d");
+      ctx?.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
     }
+  }, [outputCanvas, showResults, enableAlerts, videoElement]);
+
+  useEffect(() => {
+    // Hydrate shared embedding once recording/detection turns on
+    getRegisteredEmbedding();
   }, [enabled]);
 
-  const detectFaces = useCallback(() => {
-    if (!videoElement || !canvasRef.current || !ctxRef.current) {
-      console.log("⏳ Waiting for video element and canvas...");
-      detectionLoopRef.current = requestAnimationFrame(detectFaces);
-      return;
-    }
-
-    // Log video status periodically
-    frameCountRef.current++;
-    if (frameCountRef.current % 30 === 0) {
-      console.log(`📹 Video status: readyState=${videoElement.readyState}, currentTime=${videoElement.currentTime}, srcObject=${!!videoElement.srcObject}`);
-    }
-
-    if (videoElement.readyState !== 2 && videoElement.readyState !== 4) {
-      if (frameCountRef.current % 60 === 0) {
-        console.log(`⏳ Video not ready: readyState=${videoElement.readyState} (need 2 or 4)`);
-      }
-      detectionLoopRef.current = requestAnimationFrame(detectFaces);
-      return;
-    }
-
-    try {
-      // Draw video frame to canvas
-      ctxRef.current.drawImage(
-        videoElement,
-        0,
-        0,
-        canvasRef.current.width,
-        canvasRef.current.height
-      );
-
-      // Analyze frame for faces
-      const currentFaceCount = detectFacesSimple(
-        canvasRef.current,
-        ctxRef.current
-      );
-
-      if (frameCountRef.current % 30 === 0) {
-        console.log(`👤 Face count: ${currentFaceCount}`);
-      }
-
-      setFaceCount(currentFaceCount);
-
-      // Check for no face
-      if (currentFaceCount === 0) {
-        noFaceCounterRef.current++;
-        if (noFaceCounterRef.current === 10) {
-          console.warn("🔴 NO FACE ALERT TRIGGERED");
-          setAlert({
-            type: "no-face",
-            message: "No face detected! Please position yourself in the camera.",
-            severity: "error",
-          });
-        }
-      } else {
-        if (noFaceCounterRef.current > 0) {
-          noFaceCounterRef.current = 0;
-        }
-        if (alert?.type === "no-face") {
-          setAlert(null);
-        }
-      }
-
-      // Check for multiple faces
-      if (currentFaceCount > 1) {
-        const now = Date.now();
-        if (now - multipleWarningTimeRef.current > 2000) {
-          console.warn("🟠 MULTIPLE FACES ALERT TRIGGERED");
-          setAlert({
-            type: "multiple-faces",
-            message: `Multiple people detected! Only one person should be in the frame.`,
-            severity: "error",
-          });
-          multipleWarningTimeRef.current = now;
-        }
-      } else {
-        multipleWarningTimeRef.current = 0;
-      }
-
-      // Check for distraction
-      if (previousFaceCountRef.current === 1 && currentFaceCount === 0) {
-        distractedCounterRef.current++;
-        if (distractedCounterRef.current === 8) {
-          console.warn("🟡 DISTRACTED ALERT TRIGGERED");
-          setAlert({
-            type: "distracted",
-            message: "You seem distracted! Please keep your face in the frame.",
-            severity: "warning",
-          });
-        }
-      } else if (currentFaceCount === 1) {
-        distractedCounterRef.current = Math.max(0, distractedCounterRef.current - 1);
-        if (distractedCounterRef.current === 0 && alert?.type === "distracted") {
-          setAlert(null);
-        }
-      }
-
-      previousFaceCountRef.current = currentFaceCount;
-    } catch (error) {
-      console.error("❌ Face detection error:", error);
-    }
-
-    detectionLoopRef.current = requestAnimationFrame(detectFaces);
-  }, [videoElement, alert]);
-
-  // Start detection loop when video element becomes available
   useEffect(() => {
-    if (!enabled || !videoElement || !canvasRef.current) {
-      console.log("⚠️ Detection not starting:", {
-        enabled,
-        hasVideo: !!videoElement,
-        hasCanvas: !!canvasRef.current,
-      });
-      return;
-    }
+    let cancelled = false;
 
-    console.log("🚀 Starting face detection loop");
-    detectionLoopRef.current = requestAnimationFrame(detectFaces);
+    const initializeHuman = async () => {
+      if (!enabled) {
+        setStatus("idle");
+        return;
+      }
+
+      try {
+        setStatus("loading");
+        const Human = await loadHumanLibrary();
+
+        if (cancelled) return;
+
+        if (!humanRef.current) {
+          humanRef.current = new Human.Human(HUMAN_CONFIG);
+        }
+
+        // index.html warms models with the first detect(); load/warmup covers that before video is ready
+        await humanRef.current.load?.();
+        await humanRef.current.warmup?.();
+
+        if (!cancelled) {
+          setStatus("ready");
+        }
+      } catch (error) {
+        console.error("❌ Failed to initialize JS Face API:", error);
+        if (!cancelled) {
+          setStatus("error");
+        }
+      }
+    };
+
+    void initializeHuman();
 
     return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled || !videoElement || status !== "ready" || !humanRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    let isMatchingLoopRunning = true;
+
+    const clearOverlay = () => {
+      if (!canvasRef.current) return;
+      const ctx = canvasRef.current.getContext("2d");
+      ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    };
+
+    const syncCanvasSize = () => {
+      const canvas = canvasRef.current;
+      if (!canvas || !videoElement) return;
+
+      const width = videoElement.videoWidth || 640;
+      const height = videoElement.videoHeight || 480;
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+    };
+
+    // Same continuous loop pattern as index.html detectLoop()
+    const detectLoop = async () => {
+      if (cancelled || !isMatchingLoopRunning) return;
+
+      if (!videoElement || !humanRef.current || videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        detectionLoopRef.current = requestAnimationFrame(detectLoop);
+        return;
+      }
+
+      if (detectionInFlightRef.current) {
+        detectionLoopRef.current = requestAnimationFrame(detectLoop);
+        return;
+      }
+
+      detectionInFlightRef.current = true;
+
+      try {
+        const result = await humanRef.current.detect(videoElement);
+        if (cancelled) return;
+
+        const faces = result.face ?? [];
+        const currentFaceCount = faces.length;
+        const primaryFace = faces[0] ?? null;
+
+        setFaceCount(currentFaceCount);
+        setLatestResult(result);
+
+        const currentEmbedding = toNumberArray(primaryFace?.embedding);
+        const referenceEmbedding = getRegisteredEmbedding();
+        let similarity: number | null = null;
+        let recognized: boolean | null = null;
+
+        // index.html: similarity only when face + embedding exist
+        if (currentFaceCount > 0 && currentEmbedding && referenceEmbedding && humanRef.current.match) {
+          similarity = humanRef.current.match.similarity(referenceEmbedding, currentEmbedding);
+          recognized = similarity > RECOGNITION_THRESHOLD;
+        }
+
+        setRecognitionConfidence(similarity);
+        setLiveStats({
+          faceCount: currentFaceCount,
+          recognitionConfidence: similarity,
+          recognized,
+          gender: primaryFace?.gender ?? null,
+          genderScore: primaryFace?.genderScore ?? null,
+          emotions: (primaryFace?.emotion ?? [])
+            .slice()
+            .sort((a, b) => b.score - a.score),
+        });
+
+        if (enableAlertsRef.current) {
+          if (currentFaceCount === 0) {
+            noFaceCounterRef.current += 1;
+            if (noFaceCounterRef.current === 10 && alertRef.current?.type !== "no-face") {
+              setAlert({
+                type: "no-face",
+                message: "No face detected. Please position yourself in the camera.",
+                severity: "error",
+              });
+            }
+          } else {
+            noFaceCounterRef.current = 0;
+            if (alertRef.current?.type === "no-face") {
+              setAlert(null);
+            }
+          }
+
+          if (currentFaceCount > 1) {
+            const now = Date.now();
+            if (now - multipleWarningTimeRef.current > 2000 && alertRef.current?.type !== "multiple-faces") {
+              setAlert({
+                type: "multiple-faces",
+                message: "Multiple people detected. Only one person should be in the frame.",
+                severity: "error",
+              });
+              multipleWarningTimeRef.current = now;
+            }
+          } else {
+            multipleWarningTimeRef.current = 0;
+          }
+
+          if (previousFaceCountRef.current === 1 && currentFaceCount === 0) {
+            distractedCounterRef.current += 1;
+            if (distractedCounterRef.current === 8 && alertRef.current?.type !== "distracted") {
+              setAlert({
+                type: "distracted",
+                message: "You seem distracted. Please keep your face in the frame.",
+                severity: "warning",
+              });
+            }
+          } else if (currentFaceCount === 1) {
+            distractedCounterRef.current = Math.max(0, distractedCounterRef.current - 1);
+            if (distractedCounterRef.current === 0 && alertRef.current?.type === "distracted") {
+              setAlert(null);
+            }
+          }
+        }
+
+        previousFaceCountRef.current = currentFaceCount;
+
+        if (canvasRef.current) {
+          syncCanvasSize();
+          clearOverlay();
+          if (showResultsRef.current) {
+            humanRef.current.draw.all(canvasRef.current, result);
+          }
+        }
+      } catch (error) {
+        console.error("❌ JS Face API detection error:", error);
+      } finally {
+        detectionInFlightRef.current = false;
+      }
+
+      detectionLoopRef.current = requestAnimationFrame(detectLoop);
+    };
+
+    detectionLoopRef.current = requestAnimationFrame(detectLoop);
+
+    return () => {
+      cancelled = true;
+      isMatchingLoopRunning = false;
       if (detectionLoopRef.current) {
         cancelAnimationFrame(detectionLoopRef.current);
         detectionLoopRef.current = null;
       }
+      detectionInFlightRef.current = false;
     };
-  }, [detectFaces, enabled, videoElement]);
+  }, [enabled, status, videoElement]);
+
+  /**
+   * Same enrollment path as index.html Register button:
+   * fresh human.detect(video) → require one face → store embedding
+   */
+  const registerCurrentFace = async (): Promise<{ ok: true } | { ok: false; reason: string }> => {
+    const video = videoElementRef.current;
+    const human = humanRef.current;
+
+    if (!video || !human) {
+      return { ok: false, reason: "Camera or Face API is not ready yet." };
+    }
+
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      return { ok: false, reason: "Video is not ready. Please wait a moment." };
+    }
+
+    try {
+      const result = await human.detect(video);
+      const faces = result.face ?? [];
+
+      if (faces.length === 0) {
+        return { ok: false, reason: "No face detected. Try again." };
+      }
+
+      if (faces.length > 1) {
+        return { ok: false, reason: "Multiple faces detected. Please test with one person." };
+      }
+
+      const embedding = toNumberArray(faces[0]?.embedding);
+      if (!embedding || embedding.length === 0) {
+        return { ok: false, reason: "Face embedding not ready yet. Hold still and try again." };
+      }
+
+      persistRegisteredEmbedding(embedding);
+      return { ok: true };
+    } catch (error) {
+      console.error("❌ Face registration failed:", error);
+      return { ok: false, reason: "Face registration failed. Please try again." };
+    }
+  };
 
   return {
     alert,
     faceCount,
     clearAlert: () => setAlert(null),
+    status,
+    latestResult,
+    recognitionConfidence,
+    liveStats,
+    registerCurrentFace,
+    recognitionThreshold: RECOGNITION_THRESHOLD,
   };
 }
