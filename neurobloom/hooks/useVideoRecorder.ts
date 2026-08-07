@@ -6,11 +6,11 @@ import { getCameraStream, stopCameraStream } from "@/lib/cameraManager";
 export function useVideoRecorder() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const sessionIdRef = useRef<number | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
 
-  const setSessionId = (id: number) => {
-    sessionIdRef.current = id;
+  const setSessionId = (id: string | number) => {
+    sessionIdRef.current = String(id);
   };
 
   const startRecording = async () => {

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, X, Eye } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface Level9Props {
   onComplete: () => void;
@@ -11,15 +12,16 @@ interface Level9Props {
 }
 
 const ROUNDS = [
-  { target: "HAPPY",    correct: "😊", options: ["😊", "😢", "😠"] },
-  { target: "APPLE",    correct: "🍎", options: ["🚗", "🍎", "🐶"] },
-  { target: "HOUSE",    correct: "🏠", options: ["🌳", "🌟", "🏠"] },
-  { target: "SUN",      correct: "☀️", options: ["🌙", "☀️", "⭐"] },
-  { target: "FISH",     correct: "🐟", options: ["🐟", "🐸", "🦋"] },
-  { target: "ROCKET",   correct: "🚀", options: ["🚂", "⛵", "🚀"] },
+  { target: "HAPPY",    labelKey: "game_l9_word1", correct: "😊", options: ["😊", "😢", "😠"] },
+  { target: "APPLE",    labelKey: "game_l9_word2", correct: "🍎", options: ["🚗", "🍎", "🐶"] },
+  { target: "HOUSE",    labelKey: "game_l9_word3", correct: "🏠", options: ["🌳", "🌟", "🏠"] },
+  { target: "SUN",      labelKey: "game_l9_word4", correct: "☀️", options: ["🌙", "☀️", "⭐"] },
+  { target: "FISH",     labelKey: "game_l9_word5", correct: "🐟", options: ["🐟", "🐸", "🦋"] },
+  { target: "ROCKET",   labelKey: "game_l9_word6", correct: "🚀", options: ["🚂", "⛵", "🚀"] },
 ];
 
 export function Level9VisualDiscovery({ onComplete, onProgress, phase = 0 }: Level9Props) {
+  const { t } = useTranslation();
   const [round, setRound] = useState(0);
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
   const [score, setScore] = useState(0);
@@ -50,16 +52,16 @@ export function Level9VisualDiscovery({ onComplete, onProgress, phase = 0 }: Lev
           <div className="w-10 h-10 bg-white border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
             <Eye size={18} className="text-[#00BCD4]" />
           </div>
-          <span className="text-white font-black uppercase italic tracking-tight text-xl">Visual Discovery</span>
+          <span className="text-white font-black uppercase italic tracking-tight text-xl">{t("game_l9_title")}</span>
         </div>
         <div className="flex items-center gap-3">
           <div className="bg-white border-2 border-black px-3 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-            <span className="text-xs font-black uppercase tracking-widest">Score </span>
+            <span className="text-xs font-black uppercase tracking-widest">{t("game_l9_score")}{" "}</span>
             <span className="text-lg font-black">{score}</span>
           </div>
           <div className="bg-black/20 border-2 border-white/40 px-3 py-1">
             <span className="text-white text-xs font-black uppercase tracking-widest">
-              Scene {round + 1}/{ROUNDS.length}
+              {t("game_l9_scene")} {round + 1}/{ROUNDS.length}
             </span>
           </div>
         </div>
@@ -76,7 +78,7 @@ export function Level9VisualDiscovery({ onComplete, onProgress, phase = 0 }: Lev
       {/* Game area */}
       <div className="flex-1 flex flex-col items-center justify-center gap-10 p-8 relative">
         <p className="text-center text-black/60 font-black uppercase tracking-widest text-sm">
-          Match the word to the correct picture!
+          {t("game_l9_instr")}
         </p>
 
         {/* Word card */}
@@ -87,7 +89,7 @@ export function Level9VisualDiscovery({ onComplete, onProgress, phase = 0 }: Lev
           className="bg-[#00BCD4] border-4 border-black px-10 py-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] -rotate-1"
         >
           <span className="text-white font-black uppercase tracking-widest text-5xl">
-            {current.target}
+            {t(current.labelKey)}
           </span>
         </motion.div>
 
@@ -128,7 +130,7 @@ export function Level9VisualDiscovery({ onComplete, onProgress, phase = 0 }: Lev
                   <X size={72} strokeWidth={4} className="text-white" />
                 )}
                 <span className="text-white font-black uppercase italic text-xl tracking-tight">
-                  {feedback === "correct" ? "Perfect Match!" : "Try Again!"}
+                  {feedback === "correct" ? t("game_l9_correct") : t("game_l9_wrong")}
                 </span>
               </div>
             </motion.div>

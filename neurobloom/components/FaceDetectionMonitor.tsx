@@ -2,6 +2,7 @@
 
 import { useVideo } from "@/context/VideoContext";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const STATUS_CONFIG = {
   "no-face": {
@@ -9,7 +10,7 @@ const STATUS_CONFIG = {
     ring: "ring-red-400/30",
     bg: "bg-red-50 border-red-200",
     text: "text-red-600",
-    label: "No Face",
+    labelKey: "fdm_no_face",
     pulse: true,
   },
   "multiple-faces": {
@@ -17,7 +18,7 @@ const STATUS_CONFIG = {
     ring: "ring-orange-400/30",
     bg: "bg-orange-50 border-orange-200",
     text: "text-orange-600",
-    label: null, // dynamic
+    labelKey: null, // dynamic
     pulse: true,
   },
   distracted: {
@@ -25,7 +26,7 @@ const STATUS_CONFIG = {
     ring: "ring-yellow-400/30",
     bg: "bg-yellow-50 border-yellow-200",
     text: "text-yellow-700",
-    label: "Looking Away",
+    labelKey: "fdm_looking_away",
     pulse: true,
   },
   ok: {
@@ -33,7 +34,7 @@ const STATUS_CONFIG = {
     ring: "ring-emerald-400/30",
     bg: "bg-white border-slate-200",
     text: "text-slate-600",
-    label: "Face Detected",
+    labelKey: "fdm_face_detected",
     pulse: false,
   },
   detecting: {
@@ -41,19 +42,24 @@ const STATUS_CONFIG = {
     ring: "ring-slate-300/30",
     bg: "bg-white border-slate-200",
     text: "text-slate-400",
-    label: "Detecting...",
+    labelKey: "fdm_detecting",
     pulse: false,
   },
 };
 
 export function FaceDetectionMonitor() {
+  const { t } = useTranslation();
   const { faceDetectionState } = useVideo();
   const { faceCount, alert } = faceDetectionState;
 
   const key = alert?.type ?? (faceCount === 1 ? "ok" : "detecting");
   const c = STATUS_CONFIG[key as keyof typeof STATUS_CONFIG];
   const label =
-    key === "multiple-faces" ? `${faceCount} Faces` : c.label;
+    key === "multiple-faces"
+      ? `${faceCount} ${t("fdm_faces")}`
+      : c.labelKey
+      ? t(c.labelKey)
+      : null;
 
   return (
     <motion.div

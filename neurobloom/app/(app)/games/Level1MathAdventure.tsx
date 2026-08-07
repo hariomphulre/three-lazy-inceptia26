@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Check, X, Star, Coins } from 'lucide-react';
 import { useTranslation } from "@/hooks/useTranslation";
 import { Button } from '@/components/ui/button';
+import { saveSession } from "@/lib/offline/session";
 
 
 interface Level1Props {

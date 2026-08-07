@@ -3,6 +3,7 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import { useProgress } from "@/hooks/useProgress";
+import { useTranslation } from "@/hooks/useTranslation";
 import { Level1MathAdventure } from "@/app/(app)/games/Level1MathAdventure";
 import { Level2ReadingRocket } from "@/app/(app)/games/Level2ReadingRocket";
 import { Level3WritingWizard } from "@/app/(app)/games/Level3WritingWizard";
@@ -17,6 +18,7 @@ import { motion, AnimatePresence } from "framer-motion";
 function QuestContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { t } = useTranslation();
   
   const assessmentId = searchParams.get("assessmentId") || "";
   const disability = searchParams.get("disability") || "";
@@ -79,10 +81,10 @@ function QuestContent() {
           onClick={() => router.push("/personalised-path")}
           className="px-4 py-2 bg-white border-2 border-black font-black uppercase text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-muted active:translate-y-1 active:translate-x-1 active:shadow-none transition-all"
         >
-          Abandon Quest
+          {t("quest_abandon_quest")}
         </button>
         <div className="px-4 py-2 bg-white border-2 border-black font-black uppercase text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-          Mission {progress + 1}
+          {t("quest_mission")} {progress + 1}
         </div>
       </div>
 
@@ -98,8 +100,8 @@ function QuestContent() {
             <div className="w-32 h-32 bg-accent border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center rounded-full">
               <span className="text-6xl">⭐</span>
             </div>
-            <h1 className="text-4xl font-black text-black uppercase italic tracking-tighter">Mission Cleared!</h1>
-            <p className="font-bold text-black/50 uppercase text-sm tracking-widest">Returning to World Map...</p>
+            <h1 className="text-4xl font-black text-black uppercase italic tracking-tighter">{t("quest_mission_cleared")}</h1>
+            <p className="font-bold text-black/50 uppercase text-sm tracking-widest">{t("quest_returning_world_map")}</p>
           </motion.div>
         ) : (
           <motion.div 

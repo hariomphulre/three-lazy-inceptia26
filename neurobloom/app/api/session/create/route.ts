@@ -28,26 +28,42 @@ export async function POST(req: Request) {
   // Try to link to the logged-in parent's student record
   const auth = await getAuthPayload(req).catch(() => null);
   if (auth && ["parent", "educator", "researcher"].includes(auth.role)) {
-    // Update student: set assessment_id + mark in_progress
-    await pool.query(
-      `UPDATE students
-       SET assessment_id     = $1,
-           assessment_status = 'in_progress'
-       WHERE user_id = $2
-         AND assessment_status IN ('not_started', 'in_progress')`,
-      [sessionId, auth.userId]
-    );
-
-    // Also mark the referral as started
-    await pool.query(
-      `UPDATE referrals r
-         SET status = 'started'
-       FROM students s
-       WHERE s.user_id = $1
-         AND r.student_id = s.id
-         AND r.status = 'registered'`,
-      [auth.userId]
-    );
+    // Link to the specific child the parent is assessing (siblings supported).
+    // Fall back to "any not-yet-completed child" only when no id was supplied
+    // (e.g. a self-start parent with a single linked student).
+    if (studentId) {
+      await pool.query(
+        `UPDATE students
+         SET assessment_id     = $1,
+             assessment_status = 'in_progress'
+         WHERE id = $2 AND user_id = $3`,
+        [sessionId, studentId, auth.userId]
+      );
+      await pool.query(
+        `UPDATE referrals
+           SET status = 'started'
+         WHERE student_id = $1 AND status = 'registered'`,
+        [studentId]
+      );
+    } else {
+      await pool.query(
+        `UPDATE students
+         SET assessment_id     = $1,
+             assessment_status = 'in_progress'
+         WHERE user_id = $2
+           AND assessment_status IN ('not_started', 'in_progress')`,
+        [sessionId, auth.userId]
+      );
+      await pool.query(
+        `UPDATE referrals r
+           SET status = 'started'
+         FROM students s
+         WHERE s.user_id = $1
+           AND r.student_id = s.id
+           AND r.status = 'registered'`,
+        [auth.userId]
+      );
+    }
   }
 
   return NextResponse.json({ sessionId });

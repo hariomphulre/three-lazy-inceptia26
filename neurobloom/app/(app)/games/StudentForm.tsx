@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from "framer-motion";
 import { User, Calendar, Users, ArrowRight, ShieldCheck, Globe } from 'lucide-react';
 import { useVideo } from "@/context/VideoContext";
 import { useTranslation } from "@/hooks/useTranslation";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
+import { createSession } from "@/lib/offline/session";
 
 interface StudentFormProps {
   onNext: (data: StudentData) => void;
@@ -75,8 +76,10 @@ export function StudentForm({ onNext, onBack }: StudentFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate() || isSubmitting) return;
 
+    setIsSubmitting(true);
+    setSubmitError(null);
     const res = await fetch("/api/session/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
