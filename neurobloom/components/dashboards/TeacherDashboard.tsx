@@ -4,12 +4,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Users, Plus, X, Copy, Check, Trash2, FileText,
-  Send, RefreshCw, LogOut, ChevronDown, ChevronUp,
+  Send, RefreshCw, ChevronDown, ChevronUp,
   BookOpen, Brain, Zap, Ear, MessageSquare, PenTool,
   Calculator, ClipboardList, Link2, AlertCircle
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/context/AuthContext";
+import { parseConditions } from "@/lib/conditions";
 
 interface Student {
   id: string;
@@ -20,6 +21,7 @@ interface Student {
   assessment_status: "not_started" | "in_progress" | "completed";
   assessment_id?: string;
   report_url?: string;
+  detected_disabilities?: string;
   parent_name?: string;
   parent_email?: string;
   latest_referral_code?: string;
@@ -35,16 +37,6 @@ interface Note {
   author_name: string;
   created_at: string;
 }
-
-const ASSESSMENT_TYPES = [
-  { value: "dyslexia", label: "Dyslexia", icon: "📖", color: "bg-[#7C6FF7]" },
-  { value: "dyscalculia", label: "Dyscalculia", icon: "🔢", color: "bg-[#2E7D32]" },
-  { value: "dysgraphia", label: "Dysgraphia", icon: "✏️", color: "bg-[#7C6FF7]" },
-  { value: "adhd", label: "ADHD", icon: "⚡", color: "bg-[#F44336]" },
-  { value: "asd", label: "Autism (ASD)", icon: "🧩", color: "bg-[#FF9800]" },
-  { value: "speech", label: "Speech", icon: "🗣️", color: "bg-[#9C27B0]" },
-  { value: "hearing", label: "Hearing", icon: "👂", color: "bg-[#00BCD4]" },
-];
 
 const STATUS_STYLES = {
   not_started: { label: "Not Started", cls: "bg-gray-100 text-black border-black" },
@@ -62,7 +54,7 @@ function Overlay({ onClose }: { onClose: () => void }) {
 }
 
 export default function TeacherDashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -75,7 +67,6 @@ export default function TeacherDashboard() {
 
   // Assign modal
   const [assigningStudent, setAssigningStudent] = useState<Student | null>(null);
-  const [assignType, setAssignType] = useState("");
   const [assignLoading, setAssignLoading] = useState(false);
   const [assignResult, setAssignResult] = useState<{ referralLink: string; emailSent: boolean; emailWarning?: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -152,14 +143,14 @@ export default function TeacherDashboard() {
   };
 
   const handleAssign = async () => {
-    if (!assigningStudent || !assignType) return;
+    if (!assigningStudent) return;
     setAssignLoading(true);
     setAssignResult(null);
     try {
       const res = await fetch(`/api/teacher/students/${assigningStudent.id}/assign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assessmentType: assignType }),
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to assign");
@@ -240,12 +231,7 @@ export default function TeacherDashboard() {
             >
               <Plus size={16} /> Add Student
             </motion.button>
-            <button
-              onClick={logout}
-              className="flex items-center gap-2 px-3 py-3 bg-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-50 transition-all"
-            >
-              <LogOut size={14} /> Logout
-            </button>
+            {/* Logout lives in the Sidebar — no duplicate here. */}
           </div>
         </div>
 
@@ -302,7 +288,7 @@ export default function TeacherDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
               {students.map((student, i) => {
                 const st = STATUS_STYLES[student.assessment_status];
-                const atype = ASSESSMENT_TYPES.find(a => a.value === student.referral_assessment_type);
+                const conditions = parseConditions(student.detected_disabilities);
                 return (
                   <motion.div
                     key={student.id}
@@ -334,23 +320,34 @@ export default function TeacherDashboard() {
                         <p className="text-[11px] font-bold text-black/50 uppercase">📞 {student.phone}</p>
                       )}
 
-                      {/* Assessment badge + report link when completed */}
-                      {atype ? (
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`${atype.color} text-white px-3 py-1 border-2 border-black text-[10px] font-black uppercase tracking-widest shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]`}>
-                            {atype.icon} {atype.label}
-                          </span>
-                          {student.assessment_status === "completed" && student.report_url && (
-                            <a
-                              href={student.report_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 px-2 py-1 bg-black text-white border-2 border-black text-[9px] font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-800 transition-all"
-                            >
-                              📄 Report
-                            </a>
-                          )}
+                      {/* Condition — determined from the assessment report, not chosen by the teacher */}
+                      {student.assessment_status === "completed" ? (
+                        <div className="space-y-2">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-black/40">Condition · from report</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {conditions.length > 0 ? (
+                              conditions.map((c, idx) => (
+                                <span key={idx} className={`${c.color} text-white px-3 py-1 border-2 border-black text-[10px] font-black uppercase tracking-widest shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]`}>
+                                  {c.icon} {c.label}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="bg-[#43B047] text-white px-3 py-1 border-2 border-black text-[10px] font-black uppercase tracking-widest">No condition detected</span>
+                            )}
+                            {student.report_url && (
+                              <a
+                                href={student.report_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 px-2 py-1 bg-black text-white border-2 border-black text-[9px] font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-800 transition-all"
+                              >
+                                📄 Report
+                              </a>
+                            )}
+                          </div>
                         </div>
+                      ) : student.referral_assessment_type ? (
+                        <p className="text-[10px] font-black uppercase text-black/40 italic">Assessment assigned · awaiting result</p>
                       ) : (
                         <p className="text-[10px] font-black uppercase text-black/30 italic">No assessment assigned</p>
                       )}
@@ -373,7 +370,7 @@ export default function TeacherDashboard() {
                       {/* Actions */}
                       <div className="flex flex-wrap gap-2 mt-auto pt-2 border-t-2 border-black/10">
                         <button
-                          onClick={() => { setAssigningStudent(student); setAssignType(student.referral_assessment_type || ""); setAssignResult(null); }}
+                          onClick={() => { setAssigningStudent(student); setAssignResult(null); }}
                           className="flex items-center gap-1.5 px-3 py-2 bg-primary text-white border-2 border-black text-[10px] font-black uppercase tracking-widest shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
                         >
                           <Link2 size={11} /> Assign
@@ -474,22 +471,14 @@ export default function TeacherDashboard() {
                 <div className="p-6 space-y-4">
                   {!assignResult ? (
                     <>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-black/60">Select Assessment Type</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        {ASSESSMENT_TYPES.map(a => (
-                          <button
-                            key={a.value}
-                            onClick={() => setAssignType(a.value)}
-                            className={`p-3 border-4 border-black text-left transition-all ${assignType === a.value ? "shadow-none translate-x-1 translate-y-1" : "shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"} ${assignType === a.value ? a.color + " text-white" : "bg-muted text-black"}`}
-                          >
-                            <span className="text-lg">{a.icon}</span>
-                            <p className="text-[11px] font-black uppercase mt-1">{a.label}</p>
-                          </button>
-                        ))}
+                      <div className="bg-muted border-4 border-black p-4">
+                        <p className="text-sm font-bold text-black/70 leading-relaxed">
+                          This sends <span className="font-black text-black">{assigningStudent.name}</span> the standard NeuroBloom assessment invite. You don't pick a condition — the child's condition is determined automatically from the assessment report once it's completed.
+                        </p>
                       </div>
                       <button
                         onClick={handleAssign}
-                        disabled={!assignType || assignLoading}
+                        disabled={assignLoading}
                         className="w-full py-4 bg-primary text-white border-4 border-black font-black uppercase tracking-widest shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {assignLoading ? <RefreshCw size={16} className="animate-spin" /> : <Send size={16} />}

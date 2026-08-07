@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Stethoscope, ChevronDown, ChevronUp, Check, X,
-  FileDown, RefreshCw, MessageSquare, Send, LogOut,
+  FileDown, RefreshCw, MessageSquare, Send,
   Clock, Users, ClipboardList, AlertCircle, Activity
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
@@ -66,7 +66,7 @@ const NOTE_ROLE_COLORS: Record<string, string> = {
 };
 
 export default function DoctorDashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"requests" | "cases">("requests");
 
   const [requests, setRequests] = useState<DoctorRequest[]>([]);
@@ -162,12 +162,7 @@ export default function DoctorDashboard() {
               {user?.name} · Psychologist Dashboard
             </p>
           </div>
-          <button
-            onClick={logout}
-            className="flex items-center gap-2 px-3 py-3 bg-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-50 transition-all"
-          >
-            <LogOut size={14} /> Logout
-          </button>
+          {/* Logout lives in the Sidebar — no duplicate here. */}
         </div>
 
         <div className="flex-1 px-6 sm:px-8 py-6 overflow-y-auto">

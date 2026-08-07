@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   User, BookOpen, Stethoscope, MessageSquare, Send,
-  FileDown, RefreshCw, LogOut, Plus, X, Check,
+  FileDown, RefreshCw, Plus, X, Check,
   Clock, AlertCircle, Heart, Play
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/context/AuthContext";
+import { parseConditions } from "@/lib/conditions";
 
 interface StudentProfile {
   id: string;
@@ -70,7 +71,7 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
 };
 
 export default function ParentDashboard({ onStartTest }: { onStartTest?: () => void }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
   // A parent can always launch the assessment, even without a teacher referral.
   // With a linked child, the child's id is carried so the session links correctly.
@@ -216,20 +217,13 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
               Parent Portal · {user?.name}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => startAssessment(selectedId ?? undefined)}
-              className="flex items-center gap-2 px-4 py-3 bg-[#43B047] text-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
-            >
-              <Play size={14} /> Start Assessment
-            </button>
-            <button
-              onClick={logout}
-              className="flex items-center gap-2 px-3 py-3 bg-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-50 transition-all"
-            >
-              <LogOut size={14} /> Logout
-            </button>
-          </div>
+          {/* Logout lives in the Sidebar — no duplicate here. */}
+          <button
+            onClick={() => startAssessment(selectedId ?? undefined)}
+            className="flex items-center gap-2 px-4 py-3 bg-[#43B047] text-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
+          >
+            <Play size={14} /> Start Assessment
+          </button>
         </div>
 
         <div className="flex-1 px-6 sm:px-8 py-6 overflow-y-auto">
@@ -307,7 +301,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                   </div>
 
                   <div className="space-y-3">
-                    {student.referral_assessment_type && (
+                    {student.referral_assessment_type && student.referral_assessment_type !== "general" && (
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-black uppercase tracking-widest text-black/50">Assessment</span>
                         <span className="px-3 py-1 bg-primary text-white border-2 border-black text-[10px] font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
@@ -331,12 +325,25 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                         </span>
                       </div>
                     )}
-                    {student.detected_disabilities && (
-                      <div className="bg-muted border-2 border-black p-3 mt-2">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-black/40 mb-1">Detected Areas</p>
-                        <p className="text-sm font-bold text-black">{student.detected_disabilities}</p>
-                      </div>
-                    )}
+                    {student.detected_disabilities && (() => {
+                      const conditions = parseConditions(student.detected_disabilities);
+                      return (
+                        <div className="bg-muted border-2 border-black p-3 mt-2">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-black/40 mb-2">Condition · from report</p>
+                          {conditions.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {conditions.map((c, idx) => (
+                                <span key={idx} className={`${c.color} text-white px-3 py-1 border-2 border-black text-[10px] font-black uppercase tracking-widest`}>
+                                  {c.icon} {c.label}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm font-bold text-black">{student.detected_disabilities}</p>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {student.report_url && (
                       <a
                         href={student.report_url}
