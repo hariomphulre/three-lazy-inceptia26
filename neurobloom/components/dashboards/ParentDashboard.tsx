@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   User, BookOpen, Stethoscope, MessageSquare, Send,
   FileDown, RefreshCw, LogOut, Plus, X, Check,
-  Clock, AlertCircle, Heart
+  Clock, AlertCircle, Heart, Play
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/context/AuthContext";
@@ -43,14 +44,14 @@ interface DoctorRequest {
   created_at: string;
 }
 
-const MOCK_DOCTORS = [
-  { id: "mock-1", name: "Dr. Ananya Sharma", title: "Child Neuropsychologist", color: "#049CD8" },
-  { id: "mock-2", name: "Dr. Rohan Mehta", title: "Educational Psychologist", color: "#E52521" },
-  { id: "mock-3", name: "Dr. Priya Nair", title: "Developmental Psychologist", color: "#43B047" },
-  { id: "mock-4", name: "Dr. Vikram Iyer", title: "Senior Audiologist", color: "#FBD000" },
-  { id: "mock-5", name: "Dr. Sneha Kulkarni", title: "Learning Disabilities Specialist", color: "#ff9f43" },
-  { id: "mock-6", name: "Dr. Arjun Patel", title: "Speech & Behaviour Therapist", color: "#049CD8" },
-];
+interface Doctor {
+  id: string;
+  name: string;
+  email: string;
+}
+
+// Deterministic accent colours for the specialist cards (API only returns id/name/email)
+const DOCTOR_COLORS = ["#049CD8", "#E52521", "#43B047", "#FBD000", "#ff9f43", "#9C27B0"];
 
 const NOTE_ROLE_COLORS: Record<string, string> = {
   teacher: "bg-[#049CD8] text-white",
@@ -68,9 +69,19 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   rejected: { label: "Rejected", cls: "bg-[#E52521] text-white border-black" },
 };
 
-export default function ParentDashboard() {
+export default function ParentDashboard({ onStartTest }: { onStartTest?: () => void }) {
   const { user, logout } = useAuth();
-  const [student, setStudent] = useState<StudentProfile | null>(null);
+  const router = useRouter();
+  // A parent can always launch the assessment, even without a teacher referral.
+  // With a linked child, the child's id is carried so the session links correctly.
+  const startAssessment = (studentId?: string) => {
+    if (studentId) router.push(`/assessment?student=${studentId}`);
+    else if (onStartTest) onStartTest();
+    else router.push("/assessment");
+  };
+
+  const [students, setStudents] = useState<StudentProfile[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState("");
 
@@ -80,10 +91,15 @@ export default function ParentDashboard() {
   const [noteSubmitting, setNoteSubmitting] = useState(false);
 
   const [doctorRequests, setDoctorRequests] = useState<DoctorRequest[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [doctorsLoading, setDoctorsLoading] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [selectedDoctorId, setSelectedDoctorId] = useState("");
   const [requestSubmitting, setRequestSubmitting] = useState(false);
   const [requestError, setRequestError] = useState("");
+
+  // The currently-selected child (derived from the fetched list).
+  const student = students.find(s => s.id === selectedId) ?? null;
 
   const fetchProfile = useCallback(async () => {
     setProfileLoading(true);
@@ -92,7 +108,15 @@ export default function ParentDashboard() {
       const res = await fetch("/api/parent/profile");
       if (!res.ok) throw new Error("Failed to load profile");
       const data = await res.json();
-      setStudent(data.student);
+      const list: StudentProfile[] = data.students ?? (data.student ? [data.student] : []);
+      setStudents(list);
+      setSelectedId(prev => {
+        // Keep the current selection if still present; otherwise prefer a child
+        // who hasn't completed the assessment, else fall back to the first.
+        if (prev && list.some(s => s.id === prev)) return prev;
+        const pending = list.find(s => s.assessment_status !== "completed");
+        return (pending ?? list[0])?.id ?? null;
+      });
     } catch (e: any) {
       setProfileError(e.message);
     } finally {
@@ -115,10 +139,19 @@ export default function ParentDashboard() {
     } catch { }
   }, []);
 
+  const fetchDoctors = useCallback(async () => {
+    setDoctorsLoading(true);
+    try {
+      const res = await fetch("/api/users/doctors");
+      if (res.ok) setDoctors(await res.json());
+    } catch { } finally { setDoctorsLoading(false); }
+  }, []);
+
   useEffect(() => {
     fetchProfile();
     fetchDoctorRequests();
-  }, [fetchProfile, fetchDoctorRequests]);
+    fetchDoctors();
+  }, [fetchProfile, fetchDoctorRequests, fetchDoctors]);
 
   useEffect(() => {
     if (student?.id) fetchNotes(student.id);
@@ -177,18 +210,26 @@ export default function ParentDashboard() {
         <div className="px-6 sm:px-8 pt-8 pb-4 bg-background border-b-4 border-black flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-black text-black uppercase italic tracking-tighter">
-              My Child's <span className="text-primary">Progress</span>
+              My {students.length > 1 ? "Children's" : "Child's"} <span className="text-primary">Progress</span>
             </h1>
             <p className="text-xs font-black text-black/40 mt-1 uppercase tracking-widest">
               Parent Portal · {user?.name}
             </p>
           </div>
-          <button
-            onClick={logout}
-            className="flex items-center gap-2 px-3 py-3 bg-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-50 transition-all"
-          >
-            <LogOut size={14} /> Logout
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => startAssessment(selectedId ?? undefined)}
+              className="flex items-center gap-2 px-4 py-3 bg-[#43B047] text-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
+            >
+              <Play size={14} /> Start Assessment
+            </button>
+            <button
+              onClick={logout}
+              className="flex items-center gap-2 px-3 py-3 bg-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-50 transition-all"
+            >
+              <LogOut size={14} /> Logout
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 px-6 sm:px-8 py-6 overflow-y-auto">
@@ -196,6 +237,31 @@ export default function ParentDashboard() {
             <div className="flex items-center gap-3 bg-red-50 border-4 border-[#E52521] p-4 mb-6">
               <AlertCircle size={18} className="text-[#E52521]" />
               <p className="text-sm font-black text-[#E52521] uppercase">{profileError}</p>
+            </div>
+          )}
+
+          {/* Child switcher — only when the parent has more than one linked child */}
+          {students.length > 1 && (
+            <div className="mb-6">
+              <p className="text-[10px] font-black uppercase tracking-widest text-black/40 mb-2">Select Child</p>
+              <div className="flex flex-wrap gap-2">
+                {students.map(s => {
+                  const active = s.id === selectedId;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => setSelectedId(s.id)}
+                      className={`flex items-center gap-2 px-4 py-2.5 border-4 border-black text-xs font-black uppercase tracking-tight transition-all ${active ? "bg-primary text-white shadow-none translate-x-0.5 translate-y-0.5" : "bg-white text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"}`}
+                    >
+                      {s.name}
+                      <span
+                        title={s.assessment_status}
+                        className={`w-2.5 h-2.5 border border-black ${s.assessment_status === "completed" ? "bg-[#43B047]" : s.assessment_status === "in_progress" ? "bg-[#FBD000]" : "bg-white"}`}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -211,6 +277,13 @@ export default function ParentDashboard() {
               <p className="text-sm font-bold text-black/50 leading-relaxed">
                 Your account isn't linked to any student profile. Ask your child's teacher to send an assessment invite, then use the link from that email to register — it will automatically connect your account.
               </p>
+              <p className="text-xs font-black uppercase tracking-widest text-black/30 mt-6 mb-3">— or start one right now —</p>
+              <button
+                onClick={() => startAssessment()}
+                className="flex items-center gap-2 px-6 py-4 bg-[#43B047] text-white border-4 border-black font-black uppercase tracking-widest text-sm shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 transition-all"
+              >
+                <Play size={16} /> Start Assessment
+              </button>
             </motion.div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -310,41 +383,58 @@ export default function ParentDashboard() {
                     <p className="text-sm font-black uppercase text-black/30 italic">No teacher assigned yet</p>
                   )}
 
-                  {/* Doctor requests */}
-                  <div className="mt-6 pt-4 border-t-2 border-black/10">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-black/40 flex items-center gap-1">
-                        <Stethoscope size={12} /> Psychologist Requests
-                      </p>
-                      <button
-                        onClick={() => { setShowRequestModal(true); setRequestError(""); setSelectedDoctorId(""); }}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-[#9C27B0] text-white border-2 border-black text-[10px] font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
-                      >
-                        <Plus size={10} /> Request
-                      </button>
-                    </div>
-                    {doctorRequests.length === 0 ? (
-                      <p className="text-[11px] font-black uppercase text-black/20 italic">No requests sent</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {doctorRequests.map(req => (
-                          <div key={req.id} className="flex items-center justify-between border-2 border-black p-2 bg-muted">
-                            <div>
-                              <p className="text-[11px] font-black text-black uppercase">{req.doctor_name}</p>
-                              <p className="text-[9px] text-black/40 font-bold">{req.doctor_email}</p>
-                            </div>
-                            <span className={`px-2 py-0.5 border border-black text-[9px] font-black uppercase ${STATUS_CONFIG[req.status]?.cls || ""}`}>
-                              {req.status}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </div>
               </motion.div>
 
-              {/* SECTION 3 — Notes (full width) */}
+              {/* SECTION 3 — Specialist Support (doctor / psychologist requests) */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="lg:col-span-2 bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
+              >
+                <div className="h-2 bg-[#9C27B0]" />
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-black/40 flex items-center gap-2">
+                      <Stethoscope size={14} /> Specialist Support
+                    </h3>
+                    <button
+                      onClick={() => { setShowRequestModal(true); setRequestError(""); setSelectedDoctorId(""); }}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-[#9C27B0] text-white border-2 border-black text-[11px] font-black uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
+                    >
+                      <Plus size={12} /> Request Doctor
+                    </button>
+                  </div>
+                  <p className="text-[11px] font-bold text-black/50 mb-4 leading-relaxed">
+                    Request a consultation with a registered doctor or psychologist. They can review your child's assessment and add professional notes.
+                  </p>
+                  {doctorRequests.length === 0 ? (
+                    <div className="border-4 border-dashed border-black/15 py-8 text-center">
+                      <p className="text-[11px] font-black uppercase text-black/25 italic">No requests sent yet</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {doctorRequests.map(req => (
+                        <div key={req.id} className="flex items-center justify-between border-2 border-black p-3 bg-muted">
+                          <div className="min-w-0">
+                            <p className="text-[12px] font-black text-black uppercase truncate">{req.doctor_name}</p>
+                            <p className="text-[10px] text-black/40 font-bold truncate">{req.doctor_email}</p>
+                            {req.student_name && (
+                              <p className="text-[9px] font-black text-primary uppercase truncate">For: {req.student_name}</p>
+                            )}
+                          </div>
+                          <span className={`ml-2 shrink-0 px-2 py-0.5 border border-black text-[9px] font-black uppercase ${STATUS_CONFIG[req.status]?.cls || ""}`}>
+                            {req.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+
+              {/* SECTION 4 — Notes (full width) */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -424,23 +514,43 @@ export default function ParentDashboard() {
                 </div>
                 <div className="p-6 space-y-3">
                   <p className="text-[10px] font-black uppercase tracking-widest text-black/60">Select a Specialist</p>
-                  {MOCK_DOCTORS.map(doc => (
-                    <button
-                      key={doc.id}
-                      onClick={() => setSelectedDoctorId(doc.id)}
-                      className={`w-full flex items-center gap-4 p-3 border-4 border-black text-left transition-all ${selectedDoctorId === doc.id ? "shadow-none translate-x-1 translate-y-1" : "shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:translate-x-0.5 hover:translate-y-0.5"}`}
-                      style={{ backgroundColor: selectedDoctorId === doc.id ? doc.color : "white" }}
-                    >
-                      <div className="w-10 h-10 border-2 border-black flex items-center justify-center text-white font-black flex-shrink-0" style={{ backgroundColor: doc.color }}>
-                        {doc.name.split(" ").pop()?.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className={`font-black text-sm uppercase tracking-tight ${selectedDoctorId === doc.id ? "text-white" : "text-black"}`}>{doc.name}</p>
-                        <p className={`text-[10px] font-bold uppercase ${selectedDoctorId === doc.id ? "text-white/70" : "text-black/50"}`}>{doc.title}</p>
-                      </div>
-                      {selectedDoctorId === doc.id && <Check size={18} className="ml-auto text-white" />}
-                    </button>
-                  ))}
+
+                  {doctorsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <RefreshCw className="animate-spin text-[#9C27B0]" size={22} />
+                    </div>
+                  ) : doctors.length === 0 ? (
+                    <div className="border-4 border-dashed border-black/15 py-8 px-4 text-center">
+                      <Stethoscope size={28} className="text-black/20 mx-auto mb-2" />
+                      <p className="text-[11px] font-black uppercase text-black/40">No specialists available yet</p>
+                      <p className="text-[10px] font-bold text-black/30 mt-1">A doctor or psychologist needs to register before you can send a request.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[45vh] overflow-y-auto">
+                      {doctors.map((doc, i) => {
+                        const color = DOCTOR_COLORS[i % DOCTOR_COLORS.length];
+                        const selected = selectedDoctorId === doc.id;
+                        return (
+                          <button
+                            key={doc.id}
+                            onClick={() => setSelectedDoctorId(doc.id)}
+                            className={`w-full flex items-center gap-4 p-3 border-4 border-black text-left transition-all ${selected ? "shadow-none translate-x-1 translate-y-1" : "shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:translate-x-0.5 hover:translate-y-0.5"}`}
+                            style={{ backgroundColor: selected ? color : "white" }}
+                          >
+                            <div className="w-10 h-10 border-2 border-black flex items-center justify-center text-white font-black flex-shrink-0" style={{ backgroundColor: color }}>
+                              {doc.name.split(" ").filter(Boolean).pop()?.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className={`font-black text-sm uppercase tracking-tight truncate ${selected ? "text-white" : "text-black"}`}>{doc.name}</p>
+                              <p className={`text-[10px] font-bold truncate ${selected ? "text-white/70" : "text-black/50"}`}>{doc.email}</p>
+                            </div>
+                            {selected && <Check size={18} className="ml-auto text-white flex-shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {requestError && (
                     <p className="text-[11px] font-black text-[#E52521] uppercase">{requestError}</p>
                   )}

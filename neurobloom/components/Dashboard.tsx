@@ -39,7 +39,7 @@ export default function Dashboard({ onStartTest }: DashboardProps) {
 
   if (role === "teacher") return <TeacherDashboard />;
   if (role === "doctor" || role === "psychologist") return <DoctorDashboard />;
-  if (role === "parent") return <ParentDashboard />;
+  if (role === "parent") return <ParentDashboard onStartTest={onStartTest} />;
 
   // educator / researcher → legacy dashboard
   return <LegacyDashboard onStartTest={onStartTest} />;

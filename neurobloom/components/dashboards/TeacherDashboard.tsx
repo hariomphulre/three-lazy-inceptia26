@@ -412,7 +412,7 @@ export default function TeacherDashboard() {
               exit={{ opacity: 0, scale: 0.92, y: 20 }}
               className="fixed inset-0 flex items-center justify-center z-50 p-4"
             >
-              <div className="w-full max-w-md bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
+              <div className="w-full max-w-xl bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
                 <div className="bg-primary p-6 border-b-4 border-black flex items-center justify-between">
                   <h2 className="text-xl font-black text-white uppercase tracking-tight">Add Student</h2>
                   <button onClick={() => setShowAdd(false)} className="text-white hover:scale-110 transition-transform"><X size={20} /></button>
@@ -430,7 +430,7 @@ export default function TeacherDashboard() {
                         placeholder={f.placeholder}
                         value={(addForm as any)[f.key]}
                         onChange={e => setAddForm({ ...addForm, [f.key]: e.target.value })}
-                        className="w-full px-4 py-3 border-4 border-black bg-muted focus:bg-white focus:outline-none text-sm font-black uppercase tracking-tight transition-all"
+                        className={`w-full px-4 py-3.5 border-4 border-black bg-muted focus:bg-white focus:outline-none text-base font-black tracking-tight transition-all ${f.key === "name" ? "uppercase" : "lowercase"}`}
                       />
                     </div>
                   ))}
