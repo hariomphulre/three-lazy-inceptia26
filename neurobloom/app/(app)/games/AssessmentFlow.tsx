@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import Dashboard from "@/components/Dashboard";
+import LegacyDashboard from "@/components/LegacyDashboard";
 import { StudentForm, StudentData } from './StudentForm';
 import { TermsAndConditions } from './TermsAndConditions';
 import { PermissionsScreen } from './PermissionsScreen';
@@ -58,7 +58,7 @@ export function AssessmentFlow() {
   return (
     <>
       {currentStep === 'dashboard' && (
-        <Dashboard onStartTest={handleStartTest} />
+        <LegacyDashboard onStartTest={handleStartTest} />
       )}
 
       {currentStep === 'form' && (
