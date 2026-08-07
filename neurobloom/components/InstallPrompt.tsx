@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Download, Share, X } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 // Minimal shape of the (non-standard) beforeinstallprompt event.
 interface BeforeInstallPromptEvent extends Event {
@@ -19,6 +20,7 @@ const DISMISS_KEY = "neurobloom_install_dismissed";
  * - Hides itself when already installed (standalone) or after install/dismiss.
  */
 export function InstallPrompt() {
+  const { t } = useTranslation();
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isIOS, setIsIOS] = useState(false);
@@ -93,12 +95,12 @@ export function InstallPrompt() {
         <div className="flex-1 text-sm leading-snug">
           {isIOS ? (
             <span>
-              Install NeuroBloom: tap{" "}
-              <Share className="inline h-4 w-4 align-text-bottom" /> Share, then{" "}
-              <span className="font-semibold">“Add to Home Screen”</span>.
+              {t("install_ios_tap")}{" "}
+              <Share className="inline h-4 w-4 align-text-bottom" /> {t("install_ios_share")}{" "}
+              <span className="font-semibold">{t("install_ios_add_home")}</span>.
             </span>
           ) : (
-            <span className="font-semibold">Install NeuroBloom on your device</span>
+            <span className="font-semibold">{t("install_desktop")}</span>
           )}
         </div>
 
@@ -108,13 +110,13 @@ export function InstallPrompt() {
             className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-bold text-[#5C94FC] transition hover:bg-white/90"
           >
             <Download className="h-4 w-4" />
-            Install
+            {t("install_button")}
           </button>
         )}
 
         <button
           onClick={dismiss}
-          aria-label="Dismiss install prompt"
+          aria-label={t("install_dismiss_aria")}
           className="rounded-full p-1 text-white/80 transition hover:bg-white/20 hover:text-white"
         >
           <X className="h-4 w-4" />

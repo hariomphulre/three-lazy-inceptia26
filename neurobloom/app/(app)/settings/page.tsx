@@ -6,6 +6,7 @@ import { User, Shield, Globe, LogOut, Info, Settings as SettingsIcon } from "luc
 import { Sidebar } from "@/components/Sidebar";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { useAuth } from "@/context/AuthContext";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const ROLE_LABELS: Record<string, string> = {
   parent: "Parent / Guardian",
@@ -18,7 +19,13 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
-  const roleLabel = user ? (ROLE_LABELS[user.role] ?? user.role) : "";
+  const { t } = useTranslation();
+  const roleLabel = (() => {
+    if (!user) return "";
+    const translated = t(`role_${user.role}`);
+    if (translated && translated !== `role_${user.role}`) return translated;
+    return ROLE_LABELS[user.role] ?? user.role;
+  })();
   const initials = user?.name ? user.name.substring(0, 2).toUpperCase() : "··";
 
   return (
@@ -28,8 +35,8 @@ export default function SettingsPage() {
         {/* Header */}
         <div className="px-8 pt-10 pb-4 flex-shrink-0 bg-background flex items-center justify-between border-b-4 border-black">
           <div>
-            <h2 className="text-4xl font-black text-black uppercase italic tracking-tighter">Settings</h2>
-            <p className="text-sm font-black text-black/40 mt-1 uppercase tracking-widest">Account &amp; Preferences</p>
+            <h2 className="text-4xl font-black text-black uppercase italic tracking-tighter">{t("set_title")}</h2>
+            <p className="text-sm font-black text-black/40 mt-1 uppercase tracking-widest">{t("set_subtitle")}</p>
           </div>
           <div className="w-10 h-10 bg-accent border-2 border-black flex items-center justify-center text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
             <SettingsIcon size={18} />
@@ -49,7 +56,7 @@ export default function SettingsPage() {
               <div className="h-2 bg-primary" />
               <div className="p-6">
                 <h3 className="text-sm font-black uppercase tracking-widest text-black/40 mb-4 flex items-center gap-2">
-                  <User size={14} /> Profile
+                  <User size={14} /> {t("set_profile")}
                 </h3>
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 bg-primary border-2 border-black flex items-center justify-center text-white font-black text-2xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
@@ -75,12 +82,12 @@ export default function SettingsPage() {
               <div className="h-2 bg-[#049CD8]" />
               <div className="p-6">
                 <h3 className="text-sm font-black uppercase tracking-widest text-black/40 mb-4 flex items-center gap-2">
-                  <Globe size={14} /> Preferences
+                  <Globe size={14} /> {t("set_preferences")}
                 </h3>
                 <div className="flex items-center justify-between border-2 border-black bg-muted p-4">
                   <div>
-                    <p className="text-sm font-black text-black uppercase">Language</p>
-                    <p className="text-[11px] font-bold text-black/50">Choose the language for the app &amp; assessment.</p>
+                    <p className="text-sm font-black text-black uppercase">{t("set_language")}</p>
+                    <p className="text-[11px] font-bold text-black/50">{t("set_language_desc")}</p>
                   </div>
                   <LanguageSwitcher />
                 </div>
@@ -97,14 +104,14 @@ export default function SettingsPage() {
               <div className="h-2 bg-[#E52521]" />
               <div className="p-6 flex items-center justify-between flex-wrap gap-4">
                 <div>
-                  <h3 className="text-sm font-black uppercase tracking-widest text-black/40 mb-1">Account</h3>
-                  <p className="text-[11px] font-bold text-black/50">Sign out of your account on this device.</p>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-black/40 mb-1">{t("set_account")}</h3>
+                  <p className="text-[11px] font-bold text-black/50">{t("set_account_desc")}</p>
                 </div>
                 <button
                   onClick={logout}
                   className="flex items-center gap-2 px-5 py-3 bg-[#E52521] text-white border-4 border-black font-black text-xs uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
                 >
-                  <LogOut size={14} /> Logout
+                  <LogOut size={14} /> {t("set_logout")}
                 </button>
               </div>
             </motion.section>
@@ -118,7 +125,7 @@ export default function SettingsPage() {
             >
               <Info size={16} className="text-black/40 flex-shrink-0" />
               <p className="text-[11px] font-bold text-black/50 uppercase tracking-widest">
-                NeuroBloom · v2.0 · Cognitive assessment &amp; early learning-disability screening.
+                {t("set_about")}
               </p>
             </motion.section>
 

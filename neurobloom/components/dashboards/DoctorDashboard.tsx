@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/context/AuthContext";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface DoctorRequest {
   id: string;
@@ -67,6 +68,9 @@ const NOTE_ROLE_COLORS: Record<string, string> = {
 
 export default function DoctorDashboard() {
   const { user } = useAuth();
+  const { t } = useTranslation();
+  const statusLabel = (s: string) => t(`status_${s}`) === `status_${s}` ? s.replace("_", " ") : t(`status_${s}`);
+  const roleLabel = (r: string) => t(`role_${r}`) === `role_${r}` ? r : t(`role_${r}`);
   const [activeTab, setActiveTab] = useState<"requests" | "cases">("requests");
 
   const [requests, setRequests] = useState<DoctorRequest[]>([]);
@@ -156,10 +160,10 @@ export default function DoctorDashboard() {
         <div className="px-6 sm:px-8 pt-8 pb-4 bg-background border-b-4 border-black flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-black text-black uppercase italic tracking-tighter">
-              Doctor <span className="text-primary">Portal</span>
+              {t("dd_doctor")} <span className="text-primary">{t("dd_portal")}</span>
             </h1>
             <p className="text-xs font-black text-black/40 mt-1 uppercase tracking-widest">
-              {user?.name} · Psychologist Dashboard
+              {user?.name} · {t("dd_psychologist_dashboard")}
             </p>
           </div>
           {/* Logout lives in the Sidebar — no duplicate here. */}
@@ -169,9 +173,9 @@ export default function DoctorDashboard() {
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4 mb-8">
             {[
-              { label: "Pending Requests", value: pending.length, color: "#FBD000" },
-              { label: "Active Cases", value: cases.length, color: "#43B047" },
-              { label: "Total Requests", value: requests.length, color: "#5C94FC" },
+              { label: t("dd_pending_requests"), value: pending.length, color: "#FBD000" },
+              { label: t("dd_active_cases"), value: cases.length, color: "#43B047" },
+              { label: t("dd_total_requests"), value: requests.length, color: "#5C94FC" },
             ].map((s, i) => (
               <motion.div
                 key={s.label}
@@ -189,8 +193,8 @@ export default function DoctorDashboard() {
           {/* Tabs */}
           <div className="flex gap-0 mb-6 border-4 border-black w-fit shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             {[
-              { key: "requests", label: "Pending Requests", count: pending.length },
-              { key: "cases", label: "Active Cases", count: cases.length },
+              { key: "requests", label: t("dd_pending_requests"), count: pending.length },
+              { key: "cases", label: t("dd_active_cases"), count: cases.length },
             ].map(tab => (
               <button
                 key={tab.key}
@@ -215,7 +219,7 @@ export default function DoctorDashboard() {
               ) : pending.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 border-4 border-dashed border-black/20">
                   <ClipboardList size={48} className="text-black/20 mb-4" />
-                  <p className="text-xl font-black uppercase italic text-black/20">No Pending Requests</p>
+                  <p className="text-xl font-black uppercase italic text-black/20">{t("dd_no_pending_requests")}</p>
                 </div>
               ) : (
                 pending.map((req, i) => (
@@ -233,7 +237,7 @@ export default function DoctorDashboard() {
                       <div>
                         <p className="font-black text-black uppercase tracking-tight">{req.student_name}</p>
                         <p className="text-[10px] font-bold text-black/50">{req.student_email}</p>
-                        <p className="text-[10px] font-bold text-black/40 mt-0.5">Parent: {req.parent_name}</p>
+                        <p className="text-[10px] font-bold text-black/40 mt-0.5">{t("dd_parent")}: {req.parent_name}</p>
                       </div>
                     </div>
                     {req.referral_assessment_type && (
@@ -251,14 +255,14 @@ export default function DoctorDashboard() {
                         disabled={processingId === req.id}
                         className="flex items-center gap-1.5 px-4 py-2.5 bg-[#43B047] text-white border-2 border-black font-black text-xs uppercase shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
                       >
-                        <Check size={13} /> Accept
+                        <Check size={13} /> {t("dd_accept")}
                       </button>
                       <button
                         onClick={() => handleRespond(req.id, "rejected")}
                         disabled={processingId === req.id}
                         className="flex items-center gap-1.5 px-4 py-2.5 bg-[#E52521] text-white border-2 border-black font-black text-xs uppercase shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
                       >
-                        <X size={13} /> Reject
+                        <X size={13} /> {t("dd_reject")}
                       </button>
                     </div>
                   </motion.div>
@@ -275,8 +279,8 @@ export default function DoctorDashboard() {
               ) : cases.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 border-4 border-dashed border-black/20">
                   <Users size={48} className="text-black/20 mb-4" />
-                  <p className="text-xl font-black uppercase italic text-black/20">No Active Cases</p>
-                  <p className="text-xs font-black uppercase text-black/20 mt-2">Accept pending requests to see cases here</p>
+                  <p className="text-xl font-black uppercase italic text-black/20">{t("dd_no_active_cases")}</p>
+                  <p className="text-xs font-black uppercase text-black/20 mt-2">{t("dd_accept_requests_to_see_cases")}</p>
                 </div>
               ) : (
                 cases.map((c, i) => {
@@ -310,7 +314,7 @@ export default function DoctorDashboard() {
                         )}
                         {c.assessment_status && (
                           <span className={`px-2 py-1 border-2 border-black text-[10px] font-black uppercase ${STATUS_COLORS[c.assessment_status] || ""}`}>
-                            {c.assessment_status.replace("_", " ")}
+                            {statusLabel(c.assessment_status)}
                           </span>
                         )}
                         {c.report_url && (
@@ -321,7 +325,7 @@ export default function DoctorDashboard() {
                             onClick={e => e.stopPropagation()}
                             className="flex items-center gap-1 px-3 py-2 bg-black text-white text-[10px] font-black uppercase border-2 border-black hover:bg-gray-800 transition-all"
                           >
-                            <FileDown size={11} /> Report
+                            <FileDown size={11} /> {t("dd_report")}
                           </a>
                         )}
                         <div className="ml-auto">
@@ -343,14 +347,14 @@ export default function DoctorDashboard() {
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {c.teacher_name && (
                                   <div className="bg-[#049CD8]/10 border-2 border-[#049CD8] p-3">
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-[#049CD8] mb-1">Teacher</p>
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-[#049CD8] mb-1">{t("dd_teacher")}</p>
                                     <p className="font-black text-black">{c.teacher_name}</p>
                                     <p className="text-[11px] text-black/50">{c.teacher_email}</p>
                                   </div>
                                 )}
                                 {c.parent_name && (
                                   <div className="bg-[#43B047]/10 border-2 border-[#43B047] p-3">
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-[#43B047] mb-1">Parent / Guardian</p>
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-[#43B047] mb-1">{t("dd_parent_guardian")}</p>
                                     <p className="font-black text-black">{c.parent_name}</p>
                                     <p className="text-[11px] text-black/50">{c.parent_email}</p>
                                   </div>
@@ -359,18 +363,18 @@ export default function DoctorDashboard() {
 
                               {/* Notes */}
                               <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-black/60 mb-3">All Notes</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-black/60 mb-3">{t("dd_all_notes")}</p>
                                 {noteLoading[c.student_id] ? (
                                   <div className="flex items-center justify-center py-8"><RefreshCw size={20} className="animate-spin text-primary" /></div>
                                 ) : notes.length === 0 ? (
-                                  <p className="text-sm font-black text-black/30 uppercase italic py-4 text-center">No notes yet</p>
+                                  <p className="text-sm font-black text-black/30 uppercase italic py-4 text-center">{t("dd_no_notes_yet")}</p>
                                 ) : (
                                   <div className="space-y-2 max-h-64 overflow-y-auto">
                                     {notes.map(note => (
                                       <div key={note.id} className="border-2 border-black p-3 bg-white">
                                         <div className="flex items-center gap-2 mb-1.5">
                                           <span className={`${NOTE_ROLE_COLORS[note.author_role] || "bg-gray-400 text-white"} px-2 py-0.5 text-[9px] font-black uppercase border border-black`}>
-                                            {note.author_role}
+                                            {roleLabel(note.author_role)}
                                           </span>
                                           <span className="text-[10px] font-bold text-black/50">{note.author_name}</span>
                                           <span className="ml-auto text-[9px] text-black/30">
@@ -386,11 +390,11 @@ export default function DoctorDashboard() {
 
                               {/* Add consultation note */}
                               <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-black/60 mb-2">Add Consultation Note</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-black/60 mb-2">{t("dd_add_consultation_note")}</p>
                                 <textarea
                                   value={noteText[c.student_id] || ""}
                                   onChange={e => setNoteText(prev => ({ ...prev, [c.student_id]: e.target.value }))}
-                                  placeholder="Write consultation findings, recommendations, or observations…"
+                                  placeholder={t("dd_consultation_placeholder")}
                                   rows={3}
                                   className="w-full px-4 py-3 border-4 border-black bg-muted focus:bg-white focus:outline-none text-sm resize-none"
                                 />
@@ -400,7 +404,7 @@ export default function DoctorDashboard() {
                                   className="mt-2 flex items-center gap-2 px-5 py-3 bg-[#9C27B0] text-white border-4 border-black font-black uppercase tracking-widest text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-40"
                                 >
                                   {noteSubmitting[c.student_id] ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
-                                  Post Consultation Note
+                                  {t("dd_post_consultation_note")}
                                 </button>
                               </div>
                             </div>

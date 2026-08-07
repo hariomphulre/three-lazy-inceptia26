@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import TeacherDashboard from "./dashboards/TeacherDashboard";
 import DoctorDashboard from "./dashboards/DoctorDashboard";
 import ParentDashboard from "./dashboards/ParentDashboard";
@@ -18,13 +19,14 @@ interface DashboardProps {
 export default function Dashboard({ onStartTest }: DashboardProps) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const { t } = useTranslation();
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background font-sans">
         <div className="text-center">
           <RefreshCw className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-sm font-black uppercase tracking-widest text-black/40">Loading…</p>
+          <p className="text-sm font-black uppercase tracking-widest text-black/40">{t("dash2_loading")}</p>
         </div>
       </div>
     );

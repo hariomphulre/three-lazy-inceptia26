@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertCircle, AlertTriangle, Eye, X } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface FaceDetectionAlertProps {
   type: "multiple-faces" | "no-face" | "distracted" | null;
@@ -18,8 +19,8 @@ const config = {
     pill: "bg-rose-100 text-rose-600",
     bar: "bg-rose-400",
     emoji: "😶",
-    title: "No Face Detected",
-    tag: "ALERT",
+    titleKey: "fda_no_face_title",
+    tagKey: "fda_tag_alert",
   },
   "multiple-faces": {
     icon: AlertTriangle,
@@ -28,8 +29,8 @@ const config = {
     pill: "bg-orange-100 text-orange-600",
     bar: "bg-orange-300",
     emoji: "👥",
-    title: "Multiple People Detected",
-    tag: "WARNING",
+    titleKey: "fda_multiple_title",
+    tagKey: "fda_tag_warning",
   },
   distracted: {
     icon: Eye,
@@ -38,8 +39,8 @@ const config = {
     pill: "bg-yellow-100 text-yellow-700",
     bar: "bg-yellow-300",
     emoji: "👀",
-    title: "You Seem Distracted",
-    tag: "NOTICE",
+    titleKey: "fda_distracted_title",
+    tagKey: "fda_tag_notice",
   },
 };
 
@@ -49,6 +50,7 @@ export function FaceDetectionAlert({
   severity,
   onDismiss,
 }: FaceDetectionAlertProps) {
+  const { t } = useTranslation();
   if (!type) return null;
 
   const c = config[type];
@@ -89,11 +91,11 @@ export function FaceDetectionAlert({
             <div className="flex-1 min-w-0 pt-0.5">
               <div className="flex items-center gap-2 mb-0.5">
                 <span className={`text-[10px] font-black tracking-widest uppercase px-1.5 py-0.5 rounded-md ${c.pill}`}>
-                  {c.tag}
+                  {t(c.tagKey)}
                 </span>
               </div>
               <h3 className="font-bold text-slate-800 text-sm leading-tight">
-                {c.title}
+                {t(c.titleKey)}
               </h3>
               <p className="text-slate-500 text-xs mt-0.5 leading-snug">
                 {message}

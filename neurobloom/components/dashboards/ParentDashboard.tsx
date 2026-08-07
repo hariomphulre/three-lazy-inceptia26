@@ -11,6 +11,7 @@ import {
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/context/AuthContext";
 import { parseConditions } from "@/lib/conditions";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface StudentProfile {
   id: string;
@@ -61,18 +62,23 @@ const NOTE_ROLE_COLORS: Record<string, string> = {
   psychologist: "bg-[#9C27B0] text-white",
 };
 
-const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  not_started: { label: "Not Started", cls: "bg-gray-100 text-black border-black" },
-  in_progress: { label: "In Progress", cls: "bg-[#FBD000] text-black border-black" },
-  completed: { label: "Completed", cls: "bg-[#43B047] text-white border-black" },
-  pending: { label: "Pending", cls: "bg-[#FBD000] text-black border-black" },
-  accepted: { label: "Accepted", cls: "bg-[#43B047] text-white border-black" },
-  rejected: { label: "Rejected", cls: "bg-[#E52521] text-white border-black" },
+// Colour classes per status; the human label is resolved via t(`status_<key>`).
+const STATUS_CLS: Record<string, string> = {
+  not_started: "bg-gray-100 text-black border-black",
+  in_progress: "bg-[#FBD000] text-black border-black",
+  completed: "bg-[#43B047] text-white border-black",
+  pending: "bg-[#FBD000] text-black border-black",
+  accepted: "bg-[#43B047] text-white border-black",
+  rejected: "bg-[#E52521] text-white border-black",
 };
 
 export default function ParentDashboard({ onStartTest }: { onStartTest?: () => void }) {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const router = useRouter();
+  // Translate a DB status/role token, falling back to a de-underscored version.
+  const statusLabel = (s: string) => t(`status_${s}`) === `status_${s}` ? s.replace("_", " ") : t(`status_${s}`);
+  const roleLabel = (r: string) => t(`role_${r}`) === `role_${r}` ? r : t(`role_${r}`);
   // A parent can always launch the assessment, even without a teacher referral.
   // With a linked child, the child's id is carried so the session links correctly.
   const startAssessment = (studentId?: string) => {
@@ -107,7 +113,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
     setProfileError("");
     try {
       const res = await fetch("/api/parent/profile");
-      if (!res.ok) throw new Error("Failed to load profile");
+      if (!res.ok) throw new Error(t("pd_err_load_profile"));
       const data = await res.json();
       const list: StudentProfile[] = data.students ?? (data.student ? [data.student] : []);
       setStudents(list);
@@ -182,7 +188,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
         body: JSON.stringify({ studentId: student.id, doctorId: selectedDoctorId }),
       });
       const data = await res.json();
-      if (!res.ok) { setRequestError(data.error || "Failed to send request"); return; }
+      if (!res.ok) { setRequestError(data.error || t("pd_err_send_request")); return; }
       setShowRequestModal(false);
       setSelectedDoctorId("");
       fetchDoctorRequests();
@@ -196,7 +202,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <RefreshCw className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-sm font-black uppercase tracking-widest text-black/40">Loading your dashboard…</p>
+            <p className="text-sm font-black uppercase tracking-widest text-black/40">{t("pd_loading")}</p>
           </div>
         </main>
       </div>
@@ -211,10 +217,10 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
         <div className="px-6 sm:px-8 pt-8 pb-4 bg-background border-b-4 border-black flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-black text-black uppercase italic tracking-tighter">
-              My {students.length > 1 ? "Children's" : "Child's"} <span className="text-primary">Progress</span>
+              {students.length > 1 ? t("pd_header_my_childrens") : t("pd_header_my_childs")} <span className="text-primary">{t("pd_header_progress")}</span>
             </h1>
             <p className="text-xs font-black text-black/40 mt-1 uppercase tracking-widest">
-              Parent Portal · {user?.name}
+              {t("pd_parent_portal")} · {user?.name}
             </p>
           </div>
           {/* Logout lives in the Sidebar — no duplicate here. */}
@@ -222,7 +228,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
             onClick={() => startAssessment(selectedId ?? undefined)}
             className="flex items-center gap-2 px-4 py-3 bg-[#43B047] text-white border-2 border-black font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
           >
-            <Play size={14} /> Start Assessment
+            <Play size={14} /> {t("pd_start_assessment")}
           </button>
         </div>
 
@@ -237,7 +243,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
           {/* Child switcher — only when the parent has more than one linked child */}
           {students.length > 1 && (
             <div className="mb-6">
-              <p className="text-[10px] font-black uppercase tracking-widest text-black/40 mb-2">Select Child</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-black/40 mb-2">{t("pd_select_child")}</p>
               <div className="flex flex-wrap gap-2">
                 {students.map(s => {
                   const active = s.id === selectedId;
@@ -267,16 +273,16 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
               className="flex flex-col items-center justify-center py-24 border-4 border-dashed border-black/20 max-w-lg mx-auto text-center"
             >
               <Heart size={56} className="text-primary mb-4" />
-              <h2 className="text-2xl font-black uppercase italic text-black mb-3">No Child Linked Yet</h2>
+              <h2 className="text-2xl font-black uppercase italic text-black mb-3">{t("pd_no_child_title")}</h2>
               <p className="text-sm font-bold text-black/50 leading-relaxed">
-                You can start an assessment now without waiting for teacher assignment. Linking with a teacher is optional and can be done later.
+                {t("pd_no_child_desc")}
               </p>
-              <p className="text-xs font-black uppercase tracking-widest text-black/30 mt-6 mb-3">— or start one right now —</p>
+              <p className="text-xs font-black uppercase tracking-widest text-black/30 mt-6 mb-3">{t("pd_no_child_or")}</p>
               <button
                 onClick={() => startAssessment()}
                 className="flex items-center gap-2 px-6 py-4 bg-[#43B047] text-white border-4 border-black font-black uppercase tracking-widest text-sm shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 transition-all"
               >
-                <Play size={16} /> Start Assessment
+                <Play size={16} /> {t("pd_start_assessment")}
               </button>
             </motion.div>
           ) : (
@@ -296,14 +302,14 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                     </div>
                     <div>
                       <p className="font-black text-black text-xl uppercase tracking-tight">{student.name}</p>
-                      <p className="text-[10px] font-black text-black/40 uppercase tracking-widest">Student Profile</p>
+                      <p className="text-[10px] font-black text-black/40 uppercase tracking-widest">{t("pd_student_profile")}</p>
                     </div>
                   </div>
 
                   <div className="space-y-3">
                     {student.referral_assessment_type && student.referral_assessment_type !== "general" && (
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-black/50">Assessment</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-black/50">{t("pd_label_assessment")}</span>
                         <span className="px-3 py-1 bg-primary text-white border-2 border-black text-[10px] font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                           {student.referral_assessment_type}
                         </span>
@@ -311,15 +317,15 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                     )}
                     {student.assessment_status && (
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-black/50">Status</span>
-                        <span className={`px-3 py-1 border-2 border-black text-[10px] font-black uppercase ${STATUS_CONFIG[student.assessment_status]?.cls || "bg-gray-100 text-black border-black"}`}>
-                          {STATUS_CONFIG[student.assessment_status]?.label || student.assessment_status.replace("_", " ")}
+                        <span className="text-[10px] font-black uppercase tracking-widest text-black/50">{t("pd_label_status")}</span>
+                        <span className={`px-3 py-1 border-2 border-black text-[10px] font-black uppercase ${STATUS_CLS[student.assessment_status] || "bg-gray-100 text-black border-black"}`}>
+                          {statusLabel(student.assessment_status)}
                         </span>
                       </div>
                     )}
                     {student.assessment_date && (
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-black/50">Date</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-black/50">{t("pd_label_date")}</span>
                         <span className="text-[11px] font-bold text-black">
                           {new Date(student.assessment_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                         </span>
@@ -329,7 +335,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                       const conditions = parseConditions(student.detected_disabilities);
                       return (
                         <div className="bg-muted border-2 border-black p-3 mt-2">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-black/40 mb-2">Condition · from report</p>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-black/40 mb-2">{t("pd_condition_from_report")}</p>
                           {conditions.length > 0 ? (
                             <div className="flex flex-wrap gap-2">
                               {conditions.map((c, idx) => (
@@ -351,7 +357,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                         rel="noopener noreferrer"
                         className="flex items-center gap-2 w-full py-3 bg-black text-white border-4 border-black font-black uppercase tracking-widest text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all justify-center mt-3"
                       >
-                        <FileDown size={14} /> Download Report
+                        <FileDown size={14} /> {t("pd_download_report")}
                       </a>
                     )}
                   </div>
@@ -368,7 +374,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                 <div className="h-2 bg-[#049CD8]" />
                 <div className="p-6">
                   <h3 className="text-sm font-black uppercase tracking-widest text-black/40 mb-4 flex items-center gap-2">
-                    <BookOpen size={14} /> Assigned Teacher
+                    <BookOpen size={14} /> {t("pd_assigned_teacher")}
                   </h3>
                   {student.teacher_name ? (
                     <div className="space-y-4">
@@ -382,12 +388,12 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                         </div>
                       </div>
                       <div className="bg-[#049CD8]/10 border-2 border-[#049CD8] p-4">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#049CD8] mb-1">Contact</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[#049CD8] mb-1">{t("pd_contact")}</p>
                         <p className="text-sm font-bold text-black">{student.teacher_email}</p>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm font-black uppercase text-black/30 italic">No teacher assigned yet</p>
+                    <p className="text-sm font-black uppercase text-black/30 italic">{t("pd_no_teacher")}</p>
                   )}
 
                 </div>
@@ -404,21 +410,21 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-black uppercase tracking-widest text-black/40 flex items-center gap-2">
-                      <Stethoscope size={14} /> Specialist Support
+                      <Stethoscope size={14} /> {t("pd_specialist_support")}
                     </h3>
                     <button
                       onClick={() => { setShowRequestModal(true); setRequestError(""); setSelectedDoctorId(""); }}
                       className="flex items-center gap-2 px-4 py-2.5 bg-[#9C27B0] text-white border-2 border-black text-[11px] font-black uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
                     >
-                      <Plus size={12} /> Request Doctor
+                      <Plus size={12} /> {t("pd_request_doctor")}
                     </button>
                   </div>
                   <p className="text-[11px] font-bold text-black/50 mb-4 leading-relaxed">
-                    Request a consultation with a registered doctor or psychologist. They can review your child's assessment and add professional notes.
+                    {t("pd_specialist_desc")}
                   </p>
                   {doctorRequests.length === 0 ? (
                     <div className="border-4 border-dashed border-black/15 py-8 text-center">
-                      <p className="text-[11px] font-black uppercase text-black/25 italic">No requests sent yet</p>
+                      <p className="text-[11px] font-black uppercase text-black/25 italic">{t("pd_no_requests")}</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -428,11 +434,11 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                             <p className="text-[12px] font-black text-black uppercase truncate">{req.doctor_name}</p>
                             <p className="text-[10px] text-black/40 font-bold truncate">{req.doctor_email}</p>
                             {req.student_name && (
-                              <p className="text-[9px] font-black text-primary uppercase truncate">For: {req.student_name}</p>
+                              <p className="text-[9px] font-black text-primary uppercase truncate">{t("pd_for")} {req.student_name}</p>
                             )}
                           </div>
-                          <span className={`ml-2 shrink-0 px-2 py-0.5 border border-black text-[9px] font-black uppercase ${STATUS_CONFIG[req.status]?.cls || ""}`}>
-                            {req.status}
+                          <span className={`ml-2 shrink-0 px-2 py-0.5 border border-black text-[9px] font-black uppercase ${STATUS_CLS[req.status] || ""}`}>
+                            {statusLabel(req.status)}
                           </span>
                         </div>
                       ))}
@@ -451,19 +457,19 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                 <div className="h-2 bg-[#43B047]" />
                 <div className="p-6">
                   <h3 className="text-sm font-black uppercase tracking-widest text-black/40 mb-4 flex items-center gap-2">
-                    <MessageSquare size={14} /> Notes & Observations
+                    <MessageSquare size={14} /> {t("pd_notes_title")}
                   </h3>
                   {notesLoading ? (
                     <div className="flex items-center justify-center py-8"><RefreshCw className="animate-spin text-primary" size={20} /></div>
                   ) : notes.length === 0 ? (
-                    <p className="text-sm font-black uppercase text-black/20 italic mb-4">No notes yet — be the first to add one!</p>
+                    <p className="text-sm font-black uppercase text-black/20 italic mb-4">{t("pd_no_notes")}</p>
                   ) : (
                     <div className="space-y-3 mb-5 max-h-72 overflow-y-auto">
                       {notes.map(note => (
                         <div key={note.id} className="border-2 border-black p-4 bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                           <div className="flex items-center gap-2 mb-2">
                             <span className={`${NOTE_ROLE_COLORS[note.author_role] || "bg-gray-400 text-white"} px-2 py-0.5 text-[9px] font-black uppercase border border-black`}>
-                              {note.author_role}
+                              {roleLabel(note.author_role)}
                             </span>
                             <span className="text-[10px] font-bold text-black/50">{note.author_name}</span>
                             <span className="ml-auto text-[9px] text-black/30 font-bold">
@@ -476,11 +482,11 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                     </div>
                   )}
                   <div className="border-t-2 border-black/10 pt-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-black/40 mb-2">Add a Note</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-black/40 mb-2">{t("pd_add_note")}</p>
                     <textarea
                       value={noteText}
                       onChange={e => setNoteText(e.target.value)}
-                      placeholder="Share an observation about your child's progress, behaviour, or anything relevant…"
+                      placeholder={t("pd_note_placeholder")}
                       rows={3}
                       className="w-full px-4 py-3 border-4 border-black bg-muted focus:bg-white focus:outline-none text-sm resize-none"
                     />
@@ -490,7 +496,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                       className="mt-2 flex items-center gap-2 px-5 py-3 bg-[#43B047] text-white border-4 border-black font-black uppercase tracking-widest text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-40"
                     >
                       {noteSubmitting ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
-                      Post Note
+                      {t("pd_post_note")}
                     </button>
                   </div>
                 </div>
@@ -514,13 +520,13 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
               <div className="w-full max-w-lg bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
                 <div className="bg-[#9C27B0] p-6 border-b-4 border-black flex items-center justify-between">
                   <div>
-                    <h2 className="text-xl font-black text-white uppercase tracking-tight">Request Psychologist</h2>
-                    <p className="text-[11px] font-black text-white/70 uppercase mt-1">For: {student.name}</p>
+                    <h2 className="text-xl font-black text-white uppercase tracking-tight">{t("pd_request_psychologist")}</h2>
+                    <p className="text-[11px] font-black text-white/70 uppercase mt-1">{t("pd_for")} {student.name}</p>
                   </div>
                   <button onClick={() => setShowRequestModal(false)} className="text-white"><X size={20} /></button>
                 </div>
                 <div className="p-6 space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-black/60">Select a Specialist</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-black/60">{t("pd_select_specialist")}</p>
 
                   {doctorsLoading ? (
                     <div className="flex items-center justify-center py-8">
@@ -529,8 +535,8 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                   ) : doctors.length === 0 ? (
                     <div className="border-4 border-dashed border-black/15 py-8 px-4 text-center">
                       <Stethoscope size={28} className="text-black/20 mx-auto mb-2" />
-                      <p className="text-[11px] font-black uppercase text-black/40">No specialists available yet</p>
-                      <p className="text-[10px] font-bold text-black/30 mt-1">A doctor or psychologist needs to register before you can send a request.</p>
+                      <p className="text-[11px] font-black uppercase text-black/40">{t("pd_no_specialists")}</p>
+                      <p className="text-[10px] font-bold text-black/30 mt-1">{t("pd_no_specialists_desc")}</p>
                     </div>
                   ) : (
                     <div className="space-y-3 max-h-[45vh] overflow-y-auto">
@@ -567,7 +573,7 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                     className="w-full py-4 bg-[#9C27B0] text-white border-4 border-black font-black uppercase tracking-widest shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2 disabled:opacity-40 mt-2"
                   >
                     {requestSubmitting ? <RefreshCw size={14} className="animate-spin" /> : <Stethoscope size={14} />}
-                    Send Request
+                    {t("pd_send_request")}
                   </button>
                 </div>
               </div>
