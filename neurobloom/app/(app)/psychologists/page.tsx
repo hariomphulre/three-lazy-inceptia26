@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   Mail,
@@ -15,6 +15,7 @@ import {
 import { useTranslation } from "@/hooks/useTranslation";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { Sidebar } from "@/components/Sidebar";
+import { parseConditions } from "@/lib/conditions";
 
 interface Psychologist {
   id: number;
@@ -63,17 +64,62 @@ const PSYCHOLOGISTS: Psychologist[] = [
   { id: 6, name: "Dr. Arjun Patel", title: "Speech & Behaviour Therapist", age: 43, experience: 17, location: "Ahmedabad, Gujarat", email: "arjun.patel@neurobloom.in", phone: "+91 98988 44556", expertise: ["Speech Disability", "Autism Spectrum Disorder (ASD)"], availability: "Mon - Fri", languages: ["English", "Gujarati", "Hindi"], rating: 4.6, patients: 380, initials: "AP", accentColor: "#049CD8" },
 ];
 
-const STATS = [
-  { label: "Total Specialists", value: "6", color: "#E52521" },
-  { label: "Expertise Areas", value: "7", color: "#049CD8" },
-  { label: "Avg. Experience", value: "16 Yrs", color: "#FBD000" },
-  { label: "Total Patients", value: "2,155", color: "#43B047" },
-];
-
 export default function PsychologistsPage() {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [selectedExpertise, setSelectedExpertise] = useState<string | null>(null);
+
+  // ── Live stats — derived from real specialists + this parent's report data ──
+  const [specialistCount, setSpecialistCount] = useState<number | null>(null);
+  const [reportStudents, setReportStudents] = useState<{ assessment_status?: string; detected_disabilities?: string }[]>([]);
+  const [requestCount, setRequestCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [docRes, profRes, reqRes] = await Promise.all([
+          fetch("/api/users/doctors"),
+          fetch("/api/parent/profile"),
+          fetch("/api/doctor-requests"),
+        ]);
+        if (docRes.ok) {
+          const d = await docRes.json();
+          setSpecialistCount(Array.isArray(d) ? d.length : 0);
+        }
+        if (profRes.ok) {
+          const p = await profRes.json();
+          setReportStudents(p.students ?? (p.student ? [p.student] : []));
+        }
+        if (reqRes.ok) {
+          const r = await reqRes.json();
+          setRequestCount(Array.isArray(r) ? r.length : 0);
+        }
+      } catch {
+        /* leave placeholders */
+      }
+    })();
+  }, []);
+
+  // Distinct conditions detected across this parent's children's reports.
+  const detectedConditions = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of reportStudents) {
+      for (const c of parseConditions(s.detected_disabilities)) set.add(c.label);
+    }
+    return set.size;
+  }, [reportStudents]);
+
+  const completedCount = useMemo(
+    () => reportStudents.filter(s => s.assessment_status === "completed").length,
+    [reportStudents]
+  );
+
+  const STATS = [
+    { label: "Specialists Available", value: specialistCount ?? "—", color: "#E52521" },
+    { label: "Detected Conditions", value: detectedConditions, color: "#049CD8" },
+    { label: "Assessments Completed", value: completedCount, color: "#FBD000" },
+    { label: "Requests Sent", value: requestCount ?? "—", color: "#43B047" },
+  ];
 
   const filtered = PSYCHOLOGISTS.filter((p) => {
     const q = search.toLowerCase();
@@ -99,7 +145,7 @@ export default function PsychologistsPage() {
             <LanguageSwitcher />
             <div className="hidden sm:block text-right">
               <p className="text-xs font-black text-black uppercase tracking-tight">NeuroBloom</p>
-              <p className="text-[10px] text-black/40 font-black uppercase tracking-widest">6 Specialists</p>
+              <p className="text-[10px] text-black/40 font-black uppercase tracking-widest">{specialistCount ?? "—"} Specialists</p>
             </div>
             <div className="w-10 h-10 bg-accent border-2 border-black flex items-center justify-center text-black font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
               <Stethoscope size={18} />

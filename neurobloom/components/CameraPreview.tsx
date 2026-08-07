@@ -5,8 +5,10 @@ import { useVideo } from "@/context/VideoContext";
 import { getCameraStream } from "@/lib/cameraManager";
 import { useFaceDetection } from "@/hooks/useFaceDetection";
 import { FaceDetectionAlert } from "./FaceDetectionAlert";
+import { useTranslation } from "@/hooks/useTranslation";
 
 export function CameraPreview() {
+  const { t } = useTranslation();
   const { isRecording } = useVideo();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoReady, setVideoReady] = useState(false);
@@ -96,7 +98,7 @@ export function CameraPreview() {
 
         {videoReady && faceCount > 0 && (
           <div className="bg-green-500/80 text-white text-xs font-semibold px-2.5 py-1 rounded-full">
-            {faceCount === 1 ? "✓ 1 face detected" : `⚠️ ${faceCount} faces`}
+            {faceCount === 1 ? `✓ ${t("cam_one_face")}` : `⚠️ ${faceCount} ${t("cam_faces")}`}
           </div>
         )}
       </div>

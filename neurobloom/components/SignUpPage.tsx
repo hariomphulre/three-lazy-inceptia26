@@ -225,22 +225,24 @@ function SignUpForm() {
                 </div>
               </div>
 
-              {/* Referral code (auto-filled from URL or manual) */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-black uppercase tracking-widest">
-                  Referral Code <span className="text-black/40">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.referralCode}
-                  onChange={e => setFormData({ ...formData, referralCode: e.target.value })}
-                  placeholder="From your teacher's invite email"
-                  className="w-full px-4 py-3 bg-muted border-4 border-black focus:outline-none focus:bg-white transition-all text-sm font-black tracking-tight"
-                />
-                {urlRef && (
-                  <p className="text-[10px] font-black text-[#43B047] uppercase">✓ Referral code applied from invite link</p>
-                )}
-              </div>
+              {/* Referral code — only relevant for parents joining via a teacher's invite */}
+              {formData.role === "parent" && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-black uppercase tracking-widest">
+                    Referral Code <span className="text-black/40">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.referralCode}
+                    onChange={e => setFormData({ ...formData, referralCode: e.target.value })}
+                    placeholder="From your teacher's invite email"
+                    className="w-full px-4 py-3 bg-muted border-4 border-black focus:outline-none focus:bg-white transition-all text-sm font-black tracking-tight"
+                  />
+                  {urlRef && (
+                    <p className="text-[10px] font-black text-[#43B047] uppercase">✓ Referral code applied from invite link</p>
+                  )}
+                </div>
+              )}
 
               {/* Agreement */}
               <div className="bg-muted border-4 border-black p-4">

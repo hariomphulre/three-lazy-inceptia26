@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CloudOff, RefreshCw } from "lucide-react";
 import { pendingCount } from "@/lib/offline/db";
 import { syncAll } from "@/lib/offline/sync";
+import { useTranslation } from "@/hooks/useTranslation";
 
 /**
  * Drives background sync of offline-collected data and shows a small status pill:
@@ -15,6 +16,7 @@ import { syncAll } from "@/lib/offline/sync";
  * timer while a backlog exists, and after each save (via the sync-change event).
  */
 export function OfflineSync() {
+  const { t } = useTranslation();
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState(0);
 
@@ -69,12 +71,12 @@ export function OfflineSync() {
       {online ? (
         <>
           <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-          Syncing {pending}…
+          {t("sync_syncing")} {pending}…
         </>
       ) : (
         <>
           <CloudOff className="h-3.5 w-3.5" />
-          Offline{pending > 0 ? ` · ${pending} saved` : ""}
+          {t("sync_offline")}{pending > 0 ? ` · ${pending} ${t("sync_saved")}` : ""}
         </>
       )}
     </div>

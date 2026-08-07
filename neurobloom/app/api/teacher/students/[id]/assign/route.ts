@@ -18,11 +18,11 @@ export async function POST(
   }
 
   const { id } = await params;
-  const { assessmentType } = await req.json();
+  await req.json().catch(() => ({})); // body no longer required
 
-  if (!assessmentType) {
-    return NextResponse.json({ error: "assessmentType is required" }, { status: 400 });
-  }
+  // The teacher does NOT choose a disability. Every referral is for the same
+  // standard assessment; the child's condition is determined from the report.
+  const assessmentType = "general";
 
   // Verify student belongs to this teacher
   const studentResult = await pool.query(

@@ -23,36 +23,36 @@ function useNavItems(role: string) {
   const { t } = useTranslation();
 
   const teacherMain = [
-    { icon: <LayoutDashboard size={20} />, label: "Dashboard", href: "/dashboard" },
-    { icon: <Users size={20} />, label: "My Class", href: "/dashboard" },
-    { icon: <ClipboardList size={20} />, label: "Assessments", href: "/assessments" },
+    { icon: <LayoutDashboard size={20} />, label: t("nav_dashboard"), href: "/dashboard" },
+    { icon: <Users size={20} />, label: t("nav_my_class"), href: "/dashboard" },
+    { icon: <ClipboardList size={20} />, label: t("nav_assessments"), href: "/assessments" },
   ];
 
   const doctorMain = [
-    { icon: <LayoutDashboard size={20} />, label: "Dashboard", href: "/dashboard" },
-    { icon: <ClipboardList size={20} />, label: "Cases", href: "/dashboard" },
-    { icon: <FileText size={20} />, label: "Reports", href: "/assessments" },
-    { icon: <Stethoscope size={20} />, label: "Psychologists", href: "/psychologists" },
+    { icon: <LayoutDashboard size={20} />, label: t("nav_dashboard"), href: "/dashboard" },
+    { icon: <ClipboardList size={20} />, label: t("nav_cases"), href: "/dashboard" },
+    { icon: <FileText size={20} />, label: t("nav_reports"), href: "/assessments" },
+    { icon: <Stethoscope size={20} />, label: t("nav_psychologists"), href: "/psychologists" },
   ];
 
   const parentMain = [
-    { icon: <LayoutDashboard size={20} />, label: "Dashboard", href: "/dashboard" },
-    { icon: <ClipboardList size={20} />, label: "Take Test", href: "/assessment" },
-    { icon: <FileText size={20} />, label: "Reports", href: "/assessments" },
-    { icon: <Stethoscope size={20} />, label: "Psychologists", href: "/psychologists" },
-    { icon: <Compass size={20} />, label: t("nav_personalist") || "Paths", href: "/personalised-path" },
+    { icon: <LayoutDashboard size={20} />, label: t("nav_dashboard"), href: "/dashboard" },
+    { icon: <ClipboardList size={20} />, label: t("nav_take_test"), href: "/assessment" },
+    { icon: <FileText size={20} />, label: t("nav_reports"), href: "/assessments" },
+    { icon: <Stethoscope size={20} />, label: t("nav_psychologists"), href: "/psychologists" },
+    { icon: <Compass size={20} />, label: t("nav_personalist"), href: "/personalised-path" },
   ];
 
   const defaultMain = [
-    { icon: <LayoutDashboard size={20} />, label: t("nav_overview") || "Overview", href: "/dashboard" },
-    { icon: <FileText size={20} />, label: t("nav_reports") || "Reports", href: "/assessments" },
-    { icon: <Stethoscope size={20} />, label: "Psychologists", href: "/psychologists" },
-    { icon: <Compass size={20} />, label: t("nav_personalist") || "Paths", href: "/personalised-path" },
+    { icon: <LayoutDashboard size={20} />, label: t("nav_overview"), href: "/dashboard" },
+    { icon: <FileText size={20} />, label: t("nav_reports"), href: "/assessments" },
+    { icon: <Stethoscope size={20} />, label: t("nav_psychologists"), href: "/psychologists" },
+    { icon: <Compass size={20} />, label: t("nav_personalist"), href: "/personalised-path" },
   ];
 
   const bottom = [
-    { icon: <Settings size={20} />, label: "Settings", href: "/settings" },
-    { icon: <HelpCircle size={20} />, label: "Support", href: "/support" },
+    { icon: <Settings size={20} />, label: t("nav_settings"), href: "/settings" },
+    { icon: <HelpCircle size={20} />, label: t("nav_support"), href: "/support" },
   ];
 
   const main =
@@ -118,8 +118,11 @@ function MobileNavItem({ icon, label, href, active = false }: {
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
   const role = user?.role || "parent";
   const { main, bottom } = useNavItems(role);
+  // Translate a role token, falling back to the raw value if no key exists.
+  const roleLabel = (r: string) => t(`role_${r}`) === `role_${r}` ? r : t(`role_${r}`);
   const allItems = [...main, ...bottom];
 
   return (
@@ -140,9 +143,9 @@ export function Sidebar() {
         {role && (
           <div className="px-3 mb-4 hidden lg:block">
             <div className="px-3 py-1.5 bg-primary/10 border-2 border-primary text-primary text-[9px] font-black uppercase tracking-widest text-center">
-              {role === "doctor" || role === "psychologist" ? "Doctor" :
-               role === "teacher" ? "Teacher" :
-               role === "parent" ? "Parent" : role}
+              {role === "doctor" || role === "psychologist" ? roleLabel("doctor") :
+               role === "teacher" ? roleLabel("teacher") :
+               role === "parent" ? roleLabel("parent") : role}
             </div>
           </div>
         )}
@@ -176,7 +179,7 @@ export function Sidebar() {
             className="w-full flex items-center gap-4 px-4 py-3 border-2 border-black text-black hover:bg-red-50 hover:border-[#E52521] hover:text-[#E52521] transition-all group cursor-pointer"
           >
             <LogOut size={20} className="group-hover:scale-110 transition-transform" />
-            <span className="hidden lg:block text-sm font-bold uppercase tracking-widest">Logout</span>
+            <span className="hidden lg:block text-sm font-bold uppercase tracking-widest">{t("nav_logout")}</span>
           </button>
         </div>
       </aside>
@@ -197,7 +200,7 @@ export function Sidebar() {
           className="flex-1 flex flex-col items-center justify-center gap-1 py-2 px-1 text-black/40 hover:text-[#E52521] transition-all"
         >
           <LogOut size={18} />
-          <span className="text-[9px] font-black uppercase tracking-widest">Logout</span>
+          <span className="text-[9px] font-black uppercase tracking-widest">{t("nav_logout")}</span>
         </button>
       </nav>
 
