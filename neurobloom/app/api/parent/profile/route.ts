@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { getAuthPayload } from "@/app/api/auth/me/route";
 
-// GET /api/parent/profile — get student info linked to logged-in parent
+// GET /api/parent/profile — get every child linked to the logged-in parent.
+// A parent can be linked to multiple students (e.g. siblings), one per referral.
 
 export async function GET(req: Request) {
   const auth = await getAuthPayload(req);
@@ -23,13 +24,12 @@ export async function GET(req: Request) {
      FROM students s
      LEFT JOIN users t ON t.id = s.teacher_id
      LEFT JOIN child_assessment_features caf ON caf.id = s.assessment_id
-     WHERE s.user_id = $1`,
+     WHERE s.user_id = $1
+     ORDER BY s.created_at ASC`,
     [auth.userId]
   );
 
-  if ((result.rowCount ?? 0) === 0) {
-    return NextResponse.json({ student: null, message: "No student linked to this account" });
-  }
-
-  return NextResponse.json({ student: result.rows[0] });
+  const students = result.rows;
+  // `student` (first child) kept for backward compatibility with older callers.
+  return NextResponse.json({ students, student: students[0] ?? null });
 }
