@@ -8,18 +8,20 @@ import { getAuthPayload } from "@/app/api/auth/me/route";
  * POST /api/session/create
  *
  * Creates a new child_assessment_features row.
+ * Now also accepts school_grade and language for the screening AI pipeline.
  * If the caller is a logged-in parent/educator/researcher, automatically
  * marks their linked student record as `in_progress` and stores the
  * new assessment_id on it — so teachers can see the status change immediately.
  */
 export async function POST(req: Request) {
-  const { name, age, gender } = await req.json();
+  const { name, age, gender, school_grade, language } = await req.json();
 
-  // Create the assessment row
+  // Create the assessment row (school_grade + language added for screening engine)
   const result = await pool.query(
-    `INSERT INTO child_assessment_features (child_name, age, gender)
-     VALUES ($1, $2, $3) RETURNING id`,
-    [name, age, gender]
+    `INSERT INTO child_assessment_features
+        (child_name, age, gender, school_grade, language)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [name, age, gender, school_grade ?? null, language ?? "english"]
   );
   const sessionId: string = result.rows[0].id;
 

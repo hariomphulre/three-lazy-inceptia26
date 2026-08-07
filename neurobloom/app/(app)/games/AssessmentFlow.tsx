@@ -32,7 +32,7 @@ export function AssessmentFlow() {
   };
 
   const handleAssessmentComplete = async () => {
-    // Mark the linked student record as completed
+    // 1. Mark the linked student record as completed
     try {
       const sessionId = typeof window !== 'undefined'
         ? localStorage.getItem('sessionId')
@@ -43,12 +43,34 @@ export function AssessmentFlow() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId }),
         });
+
+        // 2. Trigger the Research-Aligned Screening Engine (server-side orchestration)
+        //    One call — Flask internally runs Phase1 → Phase2 → Phase2.5 → Phase3
+        //    Non-blocking: we fire-and-forget so the UI doesn't stall.
+        //    Result will be available via GET /api/clinical_ai?sessionId=xxx
+        fetch('/api/clinical_ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId }),
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              const report = await res.json();
+              // Cache the flags for TestComplete to display
+              localStorage.setItem('screening_flags', JSON.stringify(
+                report.flags_for_formal_assessment ?? []
+              ));
+              localStorage.setItem('screening_done', 'true');
+            }
+          })
+          .catch((e) => console.warn('[AssessmentFlow] Screening AI non-fatal error:', e));
       }
     } catch (e) {
       console.warn('Could not update assessment status:', e);
     }
     setCurrentStep('complete');
   };
+
 
   const handleReturnHome = () => {
     setCurrentStep('dashboard');

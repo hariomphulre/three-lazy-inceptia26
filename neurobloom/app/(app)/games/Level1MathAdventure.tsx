@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Check, X, Star, Coins } from 'lucide-react';
 import { useTranslation } from "@/hooks/useTranslation";
 import { Button } from '@/components/ui/button';
@@ -10,9 +10,15 @@ import { Button } from '@/components/ui/button';
 interface Level1Props {
   onComplete: () => void;
   onProgress: (gameIndex: number) => void;
+  sessionId?: string | null;
+  questionnaireGroup?: "A" | "B" | "C";
 }
 
-export function Level1MathAdventure({ onComplete, onProgress }: Level1Props) {
+export function Level1MathAdventure({ onComplete, onProgress, sessionId, questionnaireGroup = "A" }: Level1Props) {
+  if (questionnaireGroup === "B" || questionnaireGroup === "C") {
+    return <MathQuestTerminal onComplete={onComplete} sessionId={sessionId} group={questionnaireGroup} />;
+  }
+
   const { t } = useTranslation();
   const [currentGame, setCurrentGame] = useState(0);
   const [score, setScore] = useState(0);
@@ -33,19 +39,28 @@ export function Level1MathAdventure({ onComplete, onProgress }: Level1Props) {
   }, [currentGame]);
 
 
+  const GAME_TASK_IDS = [
+    { id: "A-math-counting-1",   construct: "number_sense",        type: "count_apples" },
+    { id: "A-math-compare-1",    construct: "number_sense",        type: "which_has_more" },
+    { id: "A-math-compare-2",    construct: "number_sense",        type: "compare_numbers" },
+    { id: "A-math-add-1",        construct: "arithmetic_fluency",  type: "add_numbers" },
+    { id: "A-math-money-1",      construct: "arithmetic_fluency",  type: "coin_game" },
+    { id: "A-math-subtract-1",   construct: "arithmetic_fluency",  type: "candy_subtraction" },
+  ];
+
   const handleAnswer = async (isCorrect: boolean) => {
-    const timeTaken = Math.floor((Date.now() - questionStartTime.current) / 1000);
+    const reactionTimeMs = Date.now() - questionStartTime.current;
     const sessionId = localStorage.getItem("sessionId");
-
     const scoreValue = isCorrect ? 1 : 0;
+    const taskMeta = GAME_TASK_IDS[currentGame];
 
-    const payloadMap: any = {
-      0: { test1_q1: scoreValue, test1_q1_time: timeTaken },
-      1: { test1_q2: scoreValue, test1_q2_time: timeTaken },
-      2: { test1_q3: scoreValue, test1_q3_time: timeTaken },
-      3: { test1_q4: scoreValue, test1_q4_time: timeTaken },
-      4: { test1_q5: scoreValue, test1_q5_time: timeTaken },
-      5: { test1_q6: scoreValue, test1_q6_time: timeTaken },
+    const legacyPayload: any = {
+      0: { test1_q1: scoreValue, test1_q1_time: Math.floor(reactionTimeMs / 1000) },
+      1: { test1_q2: scoreValue, test1_q2_time: Math.floor(reactionTimeMs / 1000) },
+      2: { test1_q3: scoreValue, test1_q3_time: Math.floor(reactionTimeMs / 1000) },
+      3: { test1_q4: scoreValue, test1_q4_time: Math.floor(reactionTimeMs / 1000) },
+      4: { test1_q5: scoreValue, test1_q5_time: Math.floor(reactionTimeMs / 1000) },
+      5: { test1_q6: scoreValue, test1_q6_time: Math.floor(reactionTimeMs / 1000) },
     };
 
     await fetch("/api/session/save", {
@@ -53,7 +68,16 @@ export function Level1MathAdventure({ onComplete, onProgress }: Level1Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sessionId,
-        payload: payloadMap[currentGame]
+        payload: legacyPayload[currentGame],
+        // Explicit screening_task so AI scorer sees correct/incorrect clearly
+        screening_task: {
+          task_id: taskMeta.id,
+          domain: "math",
+          construct: taskMeta.construct,
+          task_type: taskMeta.type,
+          response_data: { correct: isCorrect, raw_score: scoreValue },
+          reaction_time_ms: reactionTimeMs,
+        }
       })
     });
 
@@ -301,24 +325,21 @@ export function Level1MathAdventure({ onComplete, onProgress }: Level1Props) {
     </div>,
   ];
 
+
   return (
-    // Key change: make the outer wrapper scrollable on mobile
-    <div
-      ref={containerRef}
-      className="relative max-w-4xl mx-auto px-4 overflow-y-auto overscroll-contain"
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
-      <motion.div
-        key={currentGame}
-        initial={{ opacity: 0, x: 50 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -50 }}
-        transition={{ duration: 0.3 }}
-        // Add bottom padding so content isn't clipped behind nav bars on mobile
-        className="pb-8"
-      >
-        {games[currentGame]}
-      </motion.div>
+    <div ref={containerRef} className="w-full">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={currentGame}
+          initial={{ opacity: 0, x: 50 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -50 }}
+          transition={{ duration: 0.5, ease: "anticipate" }}
+          className="w-full"
+        >
+          {games[currentGame]}
+        </motion.div>
+      </AnimatePresence>
 
       {/* Feedback animation */}
       {feedback && (
@@ -336,6 +357,98 @@ export function Level1MathAdventure({ onComplete, onProgress }: Level1Props) {
           </div>
         </motion.div>
       )}
+    </div>
+  );
+}
+
+// ── Math Quest Terminal for Groups B and C ──────────────────────────────────
+function MathQuestTerminal({ onComplete, sessionId, group }: { onComplete: () => void, sessionId?: string | null, group: "B" | "C" }) {
+  const [idx, setIdx] = useState(0);
+  const [inputVal, setInputVal] = useState("");
+  const startMs = useRef(Date.now());
+  const [feedback, setFeedback] = useState<"correct" | "incorrect" | null>(null);
+
+  const B_TRIALS = [
+    { id: "B-math-number_line-1", construct: "number_line_representation", type: "number_line_bridge", text: "Where does 67 go on a 0-100 number line? (Enter 0-100 position)", answer: "67" },
+    { id: "B-math-arithmetic-1", construct: "arithmetic_fluency", type: "arithmetic_quest", text: "15 + 28 = ?", answer: "43" },
+    { id: "B-math-story-1", construct: "math_reasoning", type: "story_problem_islands", text: "Sara has 3 boxes. Each box has 12 apples. She gives 5 away. How many are left?", answer: "31" },
+  ];
+  const C_TRIALS = [
+    { id: "C-math-number_line-1", construct: "number_line_representation", type: "number_line_1000", text: "Where does 450 go on a 0-1000 number line? (Enter 0-1000)", answer: "450" },
+    { id: "C-math-multistep-1", construct: "math_reasoning", type: "multistep_quest", text: "(45 / 5) * 3 - 7 = ?", answer: "20" },
+    { id: "C-math-patterns-1", construct: "math_reasoning", type: "pattern_logic_puzzles", text: "2, 6, 12, 20, 30, ? (What is the next number?)", answer: "42" },
+  ];
+
+  const trials = group === "C" ? C_TRIALS : B_TRIALS;
+  const trial = trials[idx];
+
+  useEffect(() => { startMs.current = Date.now(); setInputVal(""); setFeedback(null); }, [idx]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (feedback !== null) return;
+    const rt = Date.now() - startMs.current;
+    const isCorrect = inputVal.trim() === trial.answer;
+    setFeedback(isCorrect ? "correct" : "incorrect");
+
+    if (sessionId) {
+      await fetch("/api/session/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          payload: {},
+          screening_task: {
+            task_id: trial.id,
+            domain: "math",
+            construct: trial.construct,
+            task_type: trial.type,
+            response_data: { input: inputVal.trim(), correct: isCorrect },
+            reaction_time_ms: rt
+          }
+        })
+      }).catch(() => {});
+    }
+
+    setTimeout(() => {
+      if (idx < trials.length - 1) setIdx(i => i + 1);
+      else onComplete();
+    }, 1000);
+  };
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-zinc-900 rounded-xl border-4 border-zinc-700 shadow-2xl max-w-2xl mx-auto w-full text-zinc-100 font-mono">
+      <div className="w-full flex justify-between items-center border-b-2 border-zinc-700 pb-4 mb-8 text-zinc-400">
+        <span className="uppercase tracking-widest text-sm">MATH PROTOCOL: {group}</span>
+        <span className="text-sm">TRIAL {idx + 1} / {trials.length}</span>
+      </div>
+      
+      <div className="min-h-[120px] flex items-center justify-center text-center w-full mb-8">
+        <p className="text-2xl leading-relaxed">{trial.text}</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6 w-full max-w-sm">
+        <input 
+          type="text" 
+          autoFocus 
+          value={inputVal}
+          onChange={(e) => setInputVal(e.target.value)}
+          disabled={feedback !== null}
+          className="bg-zinc-800 border-2 border-zinc-600 rounded p-4 text-2xl text-center focus:outline-none focus:border-emerald-500 transition-colors"
+          placeholder="Answer..."
+        />
+        <Button 
+          type="submit" 
+          disabled={feedback !== null || !inputVal.trim()}
+          className={`py-6 text-xl tracking-widest uppercase transition-colors ${
+            feedback === "correct" ? "bg-emerald-500 hover:bg-emerald-500 text-white" : 
+            feedback === "incorrect" ? "bg-rose-500 hover:bg-rose-500 text-white" : 
+            "bg-blue-600 hover:bg-blue-500 text-white"
+          }`}
+        >
+          {feedback === "correct" ? "CORRECT" : feedback === "incorrect" ? "INCORRECT" : "SUBMIT"}
+        </Button>
+      </form>
     </div>
   );
 }

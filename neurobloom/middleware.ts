@@ -54,7 +54,7 @@ export async function middleware(req: NextRequest) {
   const publicPrefixes = [
     "/login", "/signup", "/referral", "/_next", "/favicon",
     "/api/auth/login", "/api/auth/signup", "/api/auth/logout",
-    "/api/referral",
+    "/api/referral", "/api/clinical_ai"
   ];
   if (publicPrefixes.some(p => pathname.startsWith(p))) {
     return NextResponse.next();
@@ -112,6 +112,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icons|manifest).*)",
+    "/((?!api/session/upload|_next/static|_next/image|favicon.ico|icons|manifest).*)",
   ],
 };

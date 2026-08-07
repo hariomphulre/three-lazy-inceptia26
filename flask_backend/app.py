@@ -2,6 +2,7 @@
 app.py - Production-Grade Flask API for Child Learning Disability Assessment
 """
 import io
+import json
 import logging
 import os
 from functools import wraps
@@ -38,6 +39,9 @@ from utils.video_analysis import run_video_analysis_for_session
 
 # ── EEG analyzer ─────────────────────────────────────────────────
 from eeg_analyzer import analyze_eeg
+
+# ── Research-Aligned Screening Engine ────────────────────────────────
+from screening_ai import run_full_pipeline as run_screening_pipeline
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -644,6 +648,87 @@ def full_report():
                 "Disability screening results are still available."
             ),
         }), 207
+
+
+# ---------------------------------------------------------------------------
+# Research-Aligned Screening Engine  (server-side orchestration)
+# ---------------------------------------------------------------------------
+
+@app.route("/predict/screening_ai/run", methods=["POST"])
+def screening_ai_run():
+    """
+    POST /predict/screening_ai/run
+
+    Single-call endpoint that runs Phase1 → Phase2 (AI-per-task scoring) →
+    Phase2.5 (deterministic aggregation) → Phase3 (narrative-only AI) and
+    returns the full structured screening report.
+
+    Body schema:
+    {
+      "child_profile": { "id": str, "name": str, "age_years": int,
+                          "school_grade": str, "language": str },
+      "raw_responses":  { "reading": [...], "math": [...],
+                          "writing": [...], "attention": [...] },
+      "previous_phase_state": {}   // optional — for pipeline resume
+    }
+
+    Returns the structured JSON defined in screening_ai.run_full_pipeline.
+    All outputs carry evidence_status='prototype_heuristic' and rubric_version.
+    """
+    body = request.get_json(silent=True) or {}
+
+    child_profile = body.get("child_profile")
+    if not child_profile:
+        return jsonify({"error": "child_profile is required"}), 400
+
+    raw_responses = body.get("raw_responses", {})
+    if not any(raw_responses.values()):
+        logger.warning(
+            "Screening AI called with empty raw_responses for session %s",
+            child_profile.get("id"),
+        )
+
+    try:
+        result = run_screening_pipeline(body)
+    except Exception as exc:
+        logger.exception("Screening AI pipeline error for session %s: %s",
+                         child_profile.get("id"), exc)
+        return jsonify({"error": f"Screening pipeline failed: {exc}"}), 500
+
+    # ── Persist to screening_reports table (best-effort) ─────────────
+    session_id = child_profile.get("id")
+    if session_id:
+        try:
+            from utils.db import get_conn
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO screening_reports
+                            (session_id, questionnaire_group, domain_scores,
+                             narrative, evidence_status, rubric_version)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (session_id) DO UPDATE
+                            SET domain_scores   = EXCLUDED.domain_scores,
+                                narrative       = EXCLUDED.narrative,
+                                updated_at      = NOW()
+                        """,
+                        [
+                            session_id,
+                            result.get("questionnaire_group"),
+                            json.dumps(result.get("domain_scores", {})),
+                            json.dumps(result.get("global_impression", {})),
+                            result.get("evidence_status", "prototype_heuristic"),
+                            result.get("rubric_version", "prototype-heuristic-v1"),
+                        ],
+                    )
+                    conn.commit()
+        except Exception as db_exc:
+            logger.warning("Could not persist screening report for %s: %s",
+                           session_id, db_exc)
+            # Non-fatal — return result anyway
+
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------

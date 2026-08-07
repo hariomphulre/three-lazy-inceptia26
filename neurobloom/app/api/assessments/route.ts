@@ -20,15 +20,25 @@ export async function GET() {
 
     const result = await pool.query(`
       SELECT
-        id,
-        child_name,
-        gender,
-        age,
-        report_url,
-        COALESCE(disabilities, '[]'::jsonb) AS disabilities,
-        session_timestamp AS created_at
-      FROM public.child_assessment_features
-      ORDER BY session_timestamp DESC
+        caf.id,
+        caf.child_name,
+        caf.gender,
+        caf.age,
+        caf.report_url,
+        caf.school_grade,
+        caf.language,
+        COALESCE(caf.disabilities, '[]'::jsonb) AS disabilities,
+        caf.session_timestamp AS created_at,
+        sr.domain_scores,
+        sr.narrative,
+        sr.flags_for_assessment,
+        sr.evidence_status,
+        sr.rubric_version,
+        sr.questionnaire_group,
+        sr.updated_at AS screening_updated_at
+      FROM public.child_assessment_features caf
+      LEFT JOIN screening_reports sr ON sr.session_id = caf.id::text
+      ORDER BY caf.session_timestamp DESC
     `);
 
     return NextResponse.json(result.rows);

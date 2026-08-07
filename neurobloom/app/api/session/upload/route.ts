@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 import { pool } from "@/lib/db";
 
@@ -9,11 +9,17 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET!,
 });
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     console.log("📥 UPLOAD API HIT");
 
-    // 1️⃣ sessionId (UUID) from header
+    // 1️⃣ Auth check (since this route bypasses middleware)
+    const token = req.cookies.get("token")?.value;
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    
+    // 2️⃣ sessionId (UUID) from header
     const sessionId = req.headers.get("x-session-id");
     console.log("🆔 sessionId (UUID):", sessionId);
 

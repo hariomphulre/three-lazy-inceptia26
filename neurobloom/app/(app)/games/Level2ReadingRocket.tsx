@@ -1,15 +1,16 @@
-﻿"use client";
+"use client";
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion } from "framer-motion";
 import { Mic, Square } from 'lucide-react';
-import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
 
 
 interface Level2Props {
   onComplete: () => void;
   onProgress: (gameIndex: number) => void;
+  sessionId?: string | null;
+  questionnaireGroup?: "A" | "B" | "C";
 }
 
 // Inline spinner component
@@ -23,7 +24,10 @@ function ButtonSpinner() {
   );
 }
 
-export function Level2ReadingRocket({ onComplete, onProgress }: Level2Props) {
+export function Level2ReadingRocket({ onComplete, onProgress, sessionId, questionnaireGroup = "A" }: Level2Props) {
+  if (questionnaireGroup === "B" || questionnaireGroup === "C") {
+    return <ReadingQuestTerminal onComplete={onComplete} sessionId={sessionId} group={questionnaireGroup} />;
+  }
   const { t } = useTranslation();
   const [currentGame, setCurrentGame] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
@@ -71,6 +75,8 @@ export function Level2ReadingRocket({ onComplete, onProgress }: Level2Props) {
           }
 
           const sessionId = localStorage.getItem("sessionId");
+          const taskId = currentGame === 0 ? "A-reading-phoneme-1" : "A-reading-decode-1";
+          const construct = currentGame === 0 ? "phonological_awareness" : "decoding_fluency";
           await fetch("/api/session/save", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -78,7 +84,15 @@ export function Level2ReadingRocket({ onComplete, onProgress }: Level2Props) {
               sessionId,
               payload: currentGame === 0
                 ? { test2_audio1: url }
-                : { test2_audio2: url }
+                : { test2_audio2: url },
+              screening_task: {
+                task_id: taskId,
+                domain: "reading",
+                construct,
+                task_type: "audio_reading_task",
+                response_data: { audio_url: url, audio_submitted: true, correct: true },
+                reaction_time_ms: 3000,
+              }
             })
           });
 
@@ -243,6 +257,106 @@ export function Level2ReadingRocket({ onComplete, onProgress }: Level2Props) {
       )}
     </div>,
   ];
+
+// ── Reading Quest Terminal for Groups B and C ────────────────────────────────
+function ReadingQuestTerminal({ onComplete, sessionId, group }: { onComplete: () => void, sessionId?: string | null, group: "B" | "C" }) {
+  const [idx, setIdx] = useState(0);
+  const [inputVal, setInputVal] = useState("");
+  const startMs = useRef(Date.now());
+  const [feedback, setFeedback] = useState<"correct" | "incorrect" | null>(null);
+
+  const B_TRIALS = [
+    { id: "B-reading-phoneme_switch-1", construct: "phonological_awareness", type: "phoneme_switch_lab", text: "Say 'cat' without the 'k' sound. What word is left?", answer: "at" },
+    { id: "B-reading-nonword-1", construct: "decoding_fluency", type: "nonword_conveyor", text: "Read this made-up word: 'Blish'. Does it rhyme with 'fish' or 'cash'?", answer: "fish" },
+    { id: "B-reading-ran-1", construct: "rapid_naming", type: "rapid_naming_race", text: "Name these colors fast: Red, Blue, Green. (Type 'done' when finished aloud)", answer: "done" },
+    { id: "B-reading-sentence-1", construct: "comprehension", type: "sentence_comprehension", text: "The dog chased the ball into the yard. What did the dog chase?", answer: "ball" },
+  ];
+  
+  const C_TRIALS = [
+    { id: "C-reading-adv_phoneme-1", construct: "phonological_awareness", type: "advanced_phoneme_lab", text: "Say 'split'. Now switch the 'p' and 'l' sounds. What is the new word?", answer: "silt" },
+    { id: "C-reading-paragraph-1", construct: "comprehension", type: "paragraph_summary", text: "Read the paragraph. What is the main idea? A) Weather, B) Dogs, C) History", answer: "A" },
+    { id: "C-reading-ran_mixed-1", construct: "rapid_naming", type: "ran_mixed_category", text: "Name quickly: 2, Red, Square, 7, Blue. (Type 'done' when finished aloud)", answer: "done" },
+  ];
+
+  const trials = group === "C" ? C_TRIALS : B_TRIALS;
+  const trial = trials[idx];
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (feedback !== null) return;
+    const rt = Date.now() - startMs.current;
+    
+    // Loose grading for demo
+    const isCorrect = inputVal.toLowerCase().trim() === trial.answer.toLowerCase();
+    setFeedback(isCorrect ? "correct" : "incorrect");
+
+    if (sessionId) {
+      await fetch("/api/session/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          payload: {},
+          screening_task: {
+            task_id: trial.id,
+            domain: "reading",
+            construct: trial.construct,
+            task_type: trial.type,
+            response_data: { input: inputVal.trim(), correct: isCorrect },
+            reaction_time_ms: rt
+          }
+        })
+      }).catch(() => {});
+    }
+
+    setTimeout(() => {
+      setFeedback(null);
+      setInputVal("");
+      if (idx < trials.length - 1) {
+        setIdx(i => i + 1);
+        startMs.current = Date.now();
+      } else {
+        onComplete();
+      }
+    }, 1000);
+  };
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-zinc-900 rounded-xl border-4 border-zinc-700 shadow-2xl max-w-2xl mx-auto w-full text-zinc-100 font-mono">
+      <div className="w-full flex justify-between items-center border-b-2 border-zinc-700 pb-4 mb-8 text-zinc-400">
+        <span className="uppercase tracking-widest text-sm">READING PROTOCOL: {group}</span>
+        <span className="text-sm">TRIAL {idx + 1} / {trials.length}</span>
+      </div>
+      
+      <div className="min-h-[120px] flex items-center justify-center text-center w-full mb-8">
+        <p className="text-2xl leading-relaxed">{trial.text}</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6 w-full max-w-sm">
+        <input 
+          type="text" 
+          autoFocus 
+          value={inputVal}
+          onChange={(e) => setInputVal(e.target.value)}
+          disabled={feedback !== null}
+          className="bg-zinc-800 border-2 border-zinc-600 rounded p-4 text-2xl text-center focus:outline-none focus:border-emerald-500 transition-colors"
+          placeholder="Answer..."
+        />
+        <button 
+          type="submit" 
+          disabled={feedback !== null || !inputVal.trim()}
+          className={`py-6 text-xl font-bold tracking-widest uppercase transition-colors rounded ${
+            feedback === "correct" ? "bg-emerald-500 text-white" : 
+            feedback === "incorrect" ? "bg-rose-500 text-white" : 
+            "bg-blue-600 hover:bg-blue-500 text-white"
+          }`}
+        >
+          {feedback === "correct" ? "CORRECT" : feedback === "incorrect" ? "INCORRECT" : "SUBMIT"}
+        </button>
+      </form>
+    </div>
+  );
+}
 
   return (
     <div className="relative">

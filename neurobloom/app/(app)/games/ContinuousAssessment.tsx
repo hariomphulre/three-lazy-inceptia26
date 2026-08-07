@@ -9,6 +9,7 @@ import { Level3WritingWizard } from '../games/Level3WritingWizard';
 import { Level4FeelingFriends } from '../games/Level4FeelingFriends';
 import { Level5SuperEars } from '../games/Level5SuperEars';
 import { Level6EagleEyes } from '../games/Level6EagleEyes';
+import { Level7FocusAdventure } from '../games/Level7FocusAdventure';
 import { StudentData } from './StudentForm';
 import { useTranslation } from "@/hooks/useTranslation";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
@@ -18,7 +19,7 @@ interface ContinuousAssessmentProps {
   onComplete: () => void;
 }
 
-type LevelId = 1 | 2 | 3 | 4 | 5 | 6;
+type LevelId = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 interface Level {
   id: LevelId;
@@ -36,14 +37,23 @@ export function ContinuousAssessment({ studentData, onComplete }: ContinuousAsse
   const [showTransition, setShowTransition] = useState(false);
   const [completedLevels, setCompletedLevels] = useState<LevelId[]>([]);
 
-  const levels: Level[] = [
+  const gradeGroupMap: Record<string, "A" | "B" | "C"> = {
+    preschool: "A", grade_1: "A",
+    grade_2: "B", grade_3: "B", grade_4: "B", grade_5: "B", grade_6: "B",
+    grade_7: "C", grade_8: "C"
+  };
+  const grade = studentData?.school_grade || "";
+  const questionnaireGroup = gradeGroupMap[grade] || ((studentData?.age || 8) <= 7 ? "A" : (studentData?.age || 8) <= 12 ? "B" : "C");
+  const sessionId = typeof window !== 'undefined' ? localStorage.getItem("sessionId") || "" : "";
+
+  const baseLevels: Level[] = [
     {
       id: 1,
       name: t('ap_math_adv'),
       theme: t('ap_math_theme'),
       icon: '🧱',
       color: 'from-orange-400 to-red-500',
-      totalGames: 6,
+      totalGames: questionnaireGroup === "A" ? 5 : 3,
     },
     {
       id: 2,
@@ -68,24 +78,21 @@ export function ContinuousAssessment({ studentData, onComplete }: ContinuousAsse
       icon: '⭐',
       color: 'from-blue-400 to-indigo-500',
       totalGames: 4,
-    },
-    {
-      id: 5,
-      name: t('ap_sup_ears'),
-      theme: t('ap_sup_theme'),
-      icon: '🎺',
-      color: 'from-green-400 to-emerald-500',
-      totalGames: 3,
-    },
-    {
-      id: 6,
-      name: t('ap_eag_eyes'),
-      theme: t('ap_eag_theme'),
-      icon: '🏰',
-      color: 'from-purple-400 to-pink-500',
-      totalGames: 4,
-    },
+    }
   ];
+
+  if (questionnaireGroup === "A") {
+    baseLevels.push(
+      { id: 5, name: t('ap_sup_ears'), theme: t('ap_sup_theme'), icon: '🎺', color: 'from-green-400 to-emerald-500', totalGames: 3 },
+      { id: 6, name: t('ap_eag_eyes'), theme: t('ap_eag_theme'), icon: '🏰', color: 'from-purple-400 to-pink-500', totalGames: 4 }
+    );
+  } else {
+    baseLevels.push(
+      { id: 7, name: "Focus Terminal", theme: "Clinical Attention", icon: '🧠', color: 'from-blue-600 to-purple-600', totalGames: 2 }
+    );
+  }
+
+  const levels = baseLevels;
 
   useEffect(() => {
     const enterFullscreen = async () => {
@@ -108,11 +115,12 @@ export function ContinuousAssessment({ studentData, onComplete }: ContinuousAsse
 
   const handleLevelComplete = () => {
     setCompletedLevels([...completedLevels, currentLevel]);
-    
-    if (currentLevel < 6) {
+    const currentIdx = levels.findIndex(l => l.id === currentLevel);
+    const nextLevel  = levels[currentIdx + 1];
+    if (nextLevel) {
       setShowTransition(true);
       setTimeout(() => {
-        setCurrentLevel((currentLevel + 1) as LevelId);
+        setCurrentLevel(nextLevel.id as LevelId);
         setCurrentGame(0);
         setShowTransition(false);
       }, 3000);
@@ -129,7 +137,8 @@ export function ContinuousAssessment({ studentData, onComplete }: ContinuousAsse
   const overallProgress = (completedGames / totalGames) * 100;
 
     if (showTransition) {
-      const nextLevel = levels.find(l => l.id === currentLevel + 1)!;
+      const currentIdx = levels.findIndex(l => l.id === currentLevel);
+      const nextLevel  = levels[currentIdx + 1] ?? levels[levels.length - 1];
       return (
         <div className={`min-h-screen bg-[#5C94FC] flex items-center justify-center overflow-hidden p-4 relative`}>
           {/* Background Clouds */}
@@ -191,13 +200,21 @@ export function ContinuousAssessment({ studentData, onComplete }: ContinuousAsse
     }
   
     const renderLevelContent = () => {
+      const props = {
+        sessionId,
+        questionnaireGroup,
+        onComplete: handleLevelComplete,
+        onProgress: (gameIndex: number) => setCurrentGame(gameIndex)
+      };
+
       switch (currentLevel) {
-        case 1: return <Level1MathAdventure onComplete={handleLevelComplete} onProgress={(gameIndex) => setCurrentGame(gameIndex)} />;
-        case 2: return <Level2ReadingRocket onComplete={handleLevelComplete} onProgress={(gameIndex) => setCurrentGame(gameIndex)} />;
-        case 3: return <Level3WritingWizard onComplete={handleLevelComplete} onProgress={(gameIndex) => setCurrentGame(gameIndex)} />;
-        case 4: return <Level4FeelingFriends onComplete={handleLevelComplete} onProgress={(gameIndex) => setCurrentGame(gameIndex)} />;
-        case 5: return <Level5SuperEars onComplete={handleLevelComplete} onProgress={(gameIndex) => setCurrentGame(gameIndex)} />;
-        case 6: return <Level6EagleEyes onComplete={handleLevelComplete} onProgress={(gameIndex) => setCurrentGame(gameIndex)} />;
+        case 1: return <Level1MathAdventure {...props} />;
+        case 2: return <Level2ReadingRocket {...props} />;
+        case 3: return <Level3WritingWizard {...props} />;
+        case 4: return <Level4FeelingFriends {...props} />;
+        case 5: return <Level5SuperEars {...props} />;
+        case 6: return <Level6EagleEyes {...props} />;
+        case 7: return <Level7FocusAdventure {...props} />;
       }
     };
   
