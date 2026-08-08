@@ -64,7 +64,15 @@ export function Level3WritingWizard({ onComplete, onProgress, phase = 0, session
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sessionId,
-          payload: { test3_image: data.url }
+          payload: { test3_image: data.url },
+          screening_task: {
+            task_id: "A-writing-shape_copy-1",
+            domain: "writing",
+            construct: "visuomotor_integration",
+            task_type: "shape_copy",
+            response_data: { image_url: data.url, image_submitted: true, correct: true },
+            reaction_time_ms: 3000
+          }
         })
       });
 

@@ -80,7 +80,7 @@ export function Level2ReadingRocket({ onComplete, onProgress, sessionId, questio
           }
 
           const sessionId = localStorage.getItem("sessionId");
-          const taskId = currentGame === 0 ? "A-reading-phoneme-1" : "A-reading-decode-1";
+          const taskId = currentGame === 0 ? "A-reading-sound_friends-1" : "A-reading-letter_sound-1";
           const construct = currentGame === 0 ? "phonological_awareness" : "decoding_fluency";
           await fetch("/api/session/save", {
             method: "POST",

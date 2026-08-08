@@ -150,15 +150,13 @@ THRESHOLDS = {
 TASK_PLAN: Dict[str, Dict[str, List[Dict]]] = {
     "A": {
         "reading": [
-            {"task_id": "A-reading-sound_friends-1",   "task_type": "sound_friends",        "construct": "phonological_awareness", "label": "Sound Friends (rhyme matching)"},
-            {"task_id": "A-reading-first_sound-1",     "task_type": "first_sound",           "construct": "phonological_awareness", "label": "First Sound Treasure Hunt"},
-            {"task_id": "A-reading-syllable_jumps-1",  "task_type": "syllable_jumps",        "construct": "phonological_awareness", "label": "Syllable Jumps"},
+            {"task_id": "A-reading-sound_friends-1",   "task_type": "sound_friends",        "construct": "phonological_awareness", "label": "Sound Friends"},
             {"task_id": "A-reading-letter_sound-1",    "task_type": "letter_sound_bridges",  "construct": "decoding_fluency",       "label": "Letter-Sound Bridges"},
         ],
         "math": [
-            {"task_id": "A-math-bug_garden-1",         "task_type": "bug_garden",            "construct": "number_sense",           "label": "Bug Garden (dot counting)"},
-            {"task_id": "A-math-magnitude-1",          "task_type": "which_plate_more",      "construct": "number_sense",           "label": "Which Plate Has More?"},
-            {"task_id": "A-math-feed_monster-1",       "task_type": "feed_monster",          "construct": "arithmetic_fluency",     "label": "Feed the Monster (addition)"},
+            {"task_id": "A-math-counting-1",          "task_type": "count_apples",          "construct": "number_sense",           "label": "Count Apples"},
+            {"task_id": "A-math-compare-1",           "task_type": "which_has_more",        "construct": "number_sense",           "label": "Which Has More?"},
+            {"task_id": "A-math-add-1",               "task_type": "add_numbers",           "construct": "arithmetic_fluency",     "label": "Add Numbers"},
         ],
         "writing": [
             {"task_id": "A-writing-big_path-1",        "task_type": "big_path_tracing",      "construct": "graphomotor_speed",      "label": "Big Path Tracing"},
@@ -182,7 +180,6 @@ TASK_PLAN: Dict[str, Dict[str, List[Dict]]] = {
         ],
         "writing": [
             {"task_id": "B-writing-copy_scroll-1",     "task_type": "copy_scroll",           "construct": "written_expression_mechanics","label": "Copy Scroll"},
-            {"task_id": "B-writing-maze-1",            "task_type": "trace_maze",            "construct": "graphomotor_speed",      "label": "Trace the Maze"},
             {"task_id": "B-writing-word_form-1",       "task_type": "word_form_practice",    "construct": "legibility",             "label": "Word Form Practice"},
         ],
         "attention": [
@@ -204,7 +201,6 @@ TASK_PLAN: Dict[str, Dict[str, List[Dict]]] = {
         "writing": [
             {"task_id": "C-writing-timed_copy-1",      "task_type": "timed_copy_paragraph",  "construct": "graphomotor_speed",      "label": "Timed Copy Paragraph"},
             {"task_id": "C-writing-essay-1",           "task_type": "essay_starter",         "construct": "written_expression_mechanics","label": "Essay Starter"},
-            {"task_id": "C-writing-precision-1",       "task_type": "precision_tracing",     "construct": "visuomotor_integration", "label": "Precision Tracing / Signature Path"},
         ],
         "attention": [
             {"task_id": "C-attention-full_cpt-1",      "task_type": "full_cpt_session",      "construct": "sustained_attention",    "label": "Full CPT Session (8–10 min)"},
