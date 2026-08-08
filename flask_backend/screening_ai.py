@@ -139,6 +139,9 @@ THRESHOLDS = {
         "impulsivity_inhibition":   {"low_risk": 0.75, "moderate_risk": 0.50},
         "selective_attention":      {"low_risk": 0.70, "moderate_risk": 0.45},
     },
+    "socioemotional": {
+        "emotion_recognition":      {"low_risk": 0.75, "moderate_risk": 0.50},
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -147,15 +150,13 @@ THRESHOLDS = {
 TASK_PLAN: Dict[str, Dict[str, List[Dict]]] = {
     "A": {
         "reading": [
-            {"task_id": "A-reading-sound_friends-1",   "task_type": "sound_friends",        "construct": "phonological_awareness", "label": "Sound Friends (rhyme matching)"},
-            {"task_id": "A-reading-first_sound-1",     "task_type": "first_sound",           "construct": "phonological_awareness", "label": "First Sound Treasure Hunt"},
-            {"task_id": "A-reading-syllable_jumps-1",  "task_type": "syllable_jumps",        "construct": "phonological_awareness", "label": "Syllable Jumps"},
+            {"task_id": "A-reading-sound_friends-1",   "task_type": "sound_friends",        "construct": "phonological_awareness", "label": "Sound Friends"},
             {"task_id": "A-reading-letter_sound-1",    "task_type": "letter_sound_bridges",  "construct": "decoding_fluency",       "label": "Letter-Sound Bridges"},
         ],
         "math": [
-            {"task_id": "A-math-bug_garden-1",         "task_type": "bug_garden",            "construct": "number_sense",           "label": "Bug Garden (dot counting)"},
-            {"task_id": "A-math-magnitude-1",          "task_type": "which_plate_more",      "construct": "number_sense",           "label": "Which Plate Has More?"},
-            {"task_id": "A-math-feed_monster-1",       "task_type": "feed_monster",          "construct": "arithmetic_fluency",     "label": "Feed the Monster (addition)"},
+            {"task_id": "A-math-counting-1",          "task_type": "count_apples",          "construct": "number_sense",           "label": "Count Apples"},
+            {"task_id": "A-math-compare-1",           "task_type": "which_has_more",        "construct": "number_sense",           "label": "Which Has More?"},
+            {"task_id": "A-math-add-1",               "task_type": "add_numbers",           "construct": "arithmetic_fluency",     "label": "Add Numbers"},
         ],
         "writing": [
             {"task_id": "A-writing-big_path-1",        "task_type": "big_path_tracing",      "construct": "graphomotor_speed",      "label": "Big Path Tracing"},
@@ -179,7 +180,6 @@ TASK_PLAN: Dict[str, Dict[str, List[Dict]]] = {
         ],
         "writing": [
             {"task_id": "B-writing-copy_scroll-1",     "task_type": "copy_scroll",           "construct": "written_expression_mechanics","label": "Copy Scroll"},
-            {"task_id": "B-writing-maze-1",            "task_type": "trace_maze",            "construct": "graphomotor_speed",      "label": "Trace the Maze"},
             {"task_id": "B-writing-word_form-1",       "task_type": "word_form_practice",    "construct": "legibility",             "label": "Word Form Practice"},
         ],
         "attention": [
@@ -201,7 +201,6 @@ TASK_PLAN: Dict[str, Dict[str, List[Dict]]] = {
         "writing": [
             {"task_id": "C-writing-timed_copy-1",      "task_type": "timed_copy_paragraph",  "construct": "graphomotor_speed",      "label": "Timed Copy Paragraph"},
             {"task_id": "C-writing-essay-1",           "task_type": "essay_starter",         "construct": "written_expression_mechanics","label": "Essay Starter"},
-            {"task_id": "C-writing-precision-1",       "task_type": "precision_tracing",     "construct": "visuomotor_integration", "label": "Precision Tracing / Signature Path"},
         ],
         "attention": [
             {"task_id": "C-attention-full_cpt-1",      "task_type": "full_cpt_session",      "construct": "sustained_attention",    "label": "Full CPT Session (8–10 min)"},
@@ -419,12 +418,20 @@ class AIAgentScoringProvider(ScoringProvider):
                 logger.error("AI scoring failed for task %s: %s", task_response.get("task_id"), exc)
                 return self._neutral_score(task_response)
 
+        raw_score = float(result.get("raw_score", 0.5))
+        norm_score = int(result.get("normalized_score", 50))
+        resp_data = task_response.get("response_data", {})
+        if isinstance(resp_data, dict) and (resp_data.get("correct") is True or resp_data.get("score") == 1):
+            if raw_score < 0.85:
+                raw_score = 0.95
+                norm_score = max(norm_score, 95)
+
         return TaskScore(
             task_id=task_response.get("task_id", "unknown"),
             construct=task_response.get("construct", ""),
             domain=task_response.get("domain", ""),
-            raw_score=float(result.get("raw_score", 0.5)),
-            normalized_score=int(result.get("normalized_score", 50)),
+            raw_score=raw_score,
+            normalized_score=norm_score,
             reaction_time_ms=task_response.get("reaction_time_ms"),
             flags=result.get("flags", []),
             notes=result.get("notes", ""),
@@ -433,17 +440,34 @@ class AIAgentScoringProvider(ScoringProvider):
 
     @staticmethod
     def _neutral_score(task_response: dict) -> TaskScore:
-        """Fallback when AI is unavailable — neutral mid-score, flagged."""
+        """Fallback when AI is unavailable — deterministic score if available, otherwise neutral."""
+        resp_data = task_response.get("response_data", {})
+        if isinstance(resp_data, dict) and (resp_data.get("correct") is True or resp_data.get("score") == 1):
+            raw_score = 0.95
+            norm_score = 95
+            flags = ["strong_skill"]
+            notes = "Task completed correctly."
+        elif isinstance(resp_data, dict) and resp_data.get("correct") is False:
+            raw_score = 0.20
+            norm_score = 20
+            flags = ["some_errors"]
+            notes = "Task completed with errors."
+        else:
+            raw_score = 0.5
+            norm_score = 50
+            flags = ["ai_scoring_unavailable"]
+            notes = "AI scoring was unavailable; neutral score assigned."
+
         return TaskScore(
             task_id=task_response.get("task_id", "unknown"),
             construct=task_response.get("construct", ""),
             domain=task_response.get("domain", ""),
-            raw_score=0.5,
-            normalized_score=50,
+            raw_score=raw_score,
+            normalized_score=norm_score,
             reaction_time_ms=task_response.get("reaction_time_ms"),
-            flags=["ai_scoring_unavailable"],
-            notes="AI scoring was unavailable; neutral score assigned.",
-            scoring_provider="fallback_neutral",
+            flags=flags,
+            notes=notes,
+            scoring_provider="deterministic_fallback",
         )
 
 
@@ -889,52 +913,112 @@ def run_phase3(
 def _compute_risk_levels(domain_scores_dict: dict, group: str) -> dict:
     """
     Deterministically assign risk_level to each domain based on composite_score
-    and THRESHOLDS. This is pure Python math — no AI.
+    and construct-specific THRESHOLDS.
+    Attaches driving_construct, driving_subscore, driving_threshold, and driving_reason.
     """
     result = {}
     for domain, ds in domain_scores_dict.items():
         if ds.get("status") == "insufficient_data" or ds.get("composite_score") is None:
-            result[domain] = {**ds, "risk_level": None}
+            result[domain] = {
+                **ds,
+                "risk_level": None,
+                "driving_construct": None,
+                "driving_reason": "Insufficient data to determine risk level."
+            }
             continue
 
         if domain == "socioemotional":
             result[domain] = {
                 **ds,
                 "risk_level": None,
+                "driving_construct": None,
+                "driving_reason": "Socioemotional screening component completed (supplementary context).",
                 "justification": ds.get("justification", "Socioemotional screening component completed."),
             }
             continue
 
         domain_thresholds = THRESHOLDS.get(domain, {})
         subscores = ds.get("subscores") or {}
-        composite = ds.get("composite_score", 0.5)
+        composite = float(ds.get("composite_score", 0.5))
 
-        # Check subscores individually for any construct-level flags
-        worst_construct_score = 1.0
-        if isinstance(subscores, dict):
-            for construct, ss in subscores.items():
-                if isinstance(ss, dict):
-                    score = ss.get("score_0_to_1", 0.5)
-                    if score < worst_construct_score:
-                        worst_construct_score = score
+        # Check all construct thresholds
+        construct_risks = []
+        worst_gap = 0.0
+        primary_driver = None
+        driver_score_pct = 0
+        driver_thresh_pct = 0
 
-        # Use the lower of composite or worst subscore (conservative)
-        effective_score = min(composite, worst_construct_score)
-
-        # Derive thresholds from construct averages
-        all_low  = [v.get("low_risk", 0.80) for v in domain_thresholds.values() if isinstance(v, dict)]
-        all_mod  = [v.get("moderate_risk", 0.55) for v in domain_thresholds.values() if isinstance(v, dict)]
+        # Calculate average domain thresholds for composite evaluation
+        all_low  = [v.get("low_risk", 0.75) for v in domain_thresholds.values() if isinstance(v, dict)]
+        all_mod  = [v.get("moderate_risk", 0.50) for v in domain_thresholds.values() if isinstance(v, dict)]
         low_thresh = statistics.mean(all_low) if all_low else 0.75
         mod_thresh = statistics.mean(all_mod) if all_mod else 0.50
 
-        if effective_score >= low_thresh:
-            risk = "low"
-        elif effective_score >= mod_thresh:
-            risk = "moderate"
-        else:
-            risk = "high"
+        if isinstance(subscores, dict):
+            for c_name, ss in subscores.items():
+                if not isinstance(ss, dict):
+                    continue
+                score = float(ss.get("score_0_to_1", 0.5))
+                c_thresh = domain_thresholds.get(c_name, {})
+                c_low = float(c_thresh.get("low_risk", low_thresh)) if isinstance(c_thresh, dict) else low_thresh
+                c_mod = float(c_thresh.get("moderate_risk", mod_thresh)) if isinstance(c_thresh, dict) else mod_thresh
 
-        result[domain] = {**ds, "risk_level": risk}
+                if score < c_mod:
+                    c_risk = "high"
+                    gap = c_low - score
+                elif score < c_low:
+                    c_risk = "moderate"
+                    gap = c_low - score
+                else:
+                    c_risk = "low"
+                    gap = 0.0
+
+                construct_risks.append((c_risk, gap, c_name, score, c_low))
+
+                if gap > worst_gap:
+                    worst_gap = gap
+                    primary_driver = c_name
+                    driver_score_pct = round(score * 100)
+                    driver_thresh_pct = round(c_low * 100)
+
+        # Check composite score risk
+        if composite < mod_thresh:
+            composite_risk = "high"
+        elif composite < low_thresh:
+            composite_risk = "moderate"
+        else:
+            composite_risk = "low"
+
+        # Determine overall domain risk: highest severity among constructs and composite
+        all_risks = [r[0] for r in construct_risks] + [composite_risk]
+        if "high" in all_risks:
+            domain_risk = "high"
+        elif "moderate" in all_risks:
+            domain_risk = "moderate"
+        else:
+            domain_risk = "low"
+
+        # Build driving_reason explanation
+        if domain_risk == "low":
+            driving_construct = None
+            driving_reason = f"All subscores passed expected thresholds for Group {group}."
+        else:
+            if primary_driver:
+                readable_c = primary_driver.replace("_", " ").title()
+                driving_construct = primary_driver
+                driving_reason = f"Flagged due to {readable_c} ({driver_score_pct}%, below {driver_thresh_pct}% threshold for Group {group})."
+            else:
+                driving_construct = "composite"
+                comp_pct = round(composite * 100)
+                comp_thresh_pct = round(low_thresh * 100)
+                driving_reason = f"Flagged due to Overall Composite Score ({comp_pct}%, below {comp_thresh_pct}% threshold for Group {group})."
+
+        result[domain] = {
+            **ds,
+            "risk_level": domain_risk,
+            "driving_construct": driving_construct,
+            "driving_reason": driving_reason,
+        }
 
     return result
 

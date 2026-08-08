@@ -93,10 +93,10 @@ export async function POST(req: Request) {
           };
         } else if (firstKey.startsWith("test3_")) {
           actualScreeningTask = {
-            task_id: `writing-auto-${firstKey}`,
+            task_id: "A-writing-big_path-1",
             domain: "writing",
-            construct: "written_expression_mechanics",
-            task_type: "writing_wizard",
+            construct: "graphomotor_speed",
+            task_type: "big_path_tracing",
             response_data: { image_submitted: true, correct: true },
             reaction_time_ms: 3000,
           };

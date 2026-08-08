@@ -15,6 +15,7 @@ import { useTranslation } from "@/hooks/useTranslation";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
+import { ClinicianDetailView } from "@/components/ClinicianDetailView";
 
 interface DomainScore {
   composite_score: number;
@@ -52,6 +53,8 @@ export default function AssessmentsPage() {
   const [data, setData] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [activeClinicalSessionId, setActiveClinicalSessionId] = useState<string | null>(null);
+  const [activeClinicalData, setActiveClinicalData] = useState<any>(null);
 
   useEffect(() => {
     fetch("/api/assessments")
@@ -183,37 +186,77 @@ export default function AssessmentsPage() {
 
                       {/* Domain scores grid */}
                       {hasScreening && (
-                        <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          {domains.map(([domain, ds]) => {
-                            const risk = (ds.risk_level && RISK_CONFIG[ds.risk_level as keyof typeof RISK_CONFIG]
-                              ? ds.risk_level as keyof typeof RISK_CONFIG
-                              : "unknown");
-                            const cfg = RISK_CONFIG[risk] ?? RISK_CONFIG.unknown;
-                            const pct = Math.round((ds.composite_score ?? 0) * 100);
-                            return (
-                              <div key={domain} className="border-2 border-black overflow-hidden">
-                                <div className={`flex items-center justify-between px-3 py-1.5 ${cfg.color}`}>
-                                  <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                                    {DOMAIN_ICONS[domain] ?? "🎯"} {domain}
-                                  </span>
-                                  <span className="flex items-center gap-1 text-[9px] font-black uppercase">
-                                    {cfg.icon} {cfg.label}
-                                  </span>
-                                </div>
-                                <div className="px-3 py-2 bg-white">
-                                  <div className="flex justify-between text-[9px] font-black uppercase text-black/40 mb-1">
-                                    <span>Score</span><span>{pct}%</span>
+                        <div className="px-6 py-4 space-y-4">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {domains.map(([domain, ds]) => {
+                              const risk = (ds.risk_level && RISK_CONFIG[ds.risk_level as keyof typeof RISK_CONFIG]
+                                ? ds.risk_level as keyof typeof RISK_CONFIG
+                                : "unknown");
+                              const cfg = RISK_CONFIG[risk] ?? RISK_CONFIG.unknown;
+                              const pct = ds.composite_score !== null && ds.composite_score !== undefined ? Math.round((ds.composite_score) * 100) : 0;
+                              return (
+                                <div key={domain} className="border-2 border-black overflow-hidden">
+                                  <div className={`flex items-center justify-between px-3 py-1.5 ${cfg.color}`}>
+                                    <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                      {DOMAIN_ICONS[domain] ?? "🎯"} {domain}
+                                    </span>
+                                    <span className="flex items-center gap-1 text-[9px] font-black uppercase">
+                                      {cfg.icon} {cfg.label}
+                                    </span>
                                   </div>
-                                  <div className="h-1.5 bg-muted border border-black/20">
-                                    <div
-                                      className={`h-full ${cfg.color.split(" ")[0]}`}
-                                      style={{ width: `${pct}%` }}
-                                    />
+                                  <div className="px-3 py-2 bg-white">
+                                    <div className="flex justify-between text-[9px] font-black uppercase text-black/40 mb-1">
+                                      <span>Score</span><span>{pct}%</span>
+                                    </div>
+                                    <div className="h-1.5 bg-muted border border-black/20">
+                                      <div
+                                        className={`h-full ${cfg.color.split(" ")[0]}`}
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
+
+                          {/* Toggle Clinician Detail View */}
+                          <div className="pt-2 flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="text-xs font-black uppercase tracking-wider gap-2"
+                              onClick={async () => {
+                                if (activeClinicalSessionId === item.id) {
+                                  setActiveClinicalSessionId(null);
+                                  setActiveClinicalData(null);
+                                } else {
+                                  setActiveClinicalSessionId(item.id);
+                                  try {
+                                    const res = await fetch(`/api/clinical_ai?sessionId=${item.id}`);
+                                    if (res.ok) {
+                                      const repData = await res.json();
+                                      setActiveClinicalData(repData);
+                                    }
+                                  } catch (e) {
+                                    console.error("Failed to load clinical report:", e);
+                                  }
+                                }
+                              }}
+                            >
+                              {activeClinicalSessionId === item.id ? "Hide Clinical View" : "📋 View Clinical Detail Report"}
+                            </Button>
+                          </div>
+
+                          {/* Clinician Detail Expansion */}
+                          {activeClinicalSessionId === item.id && activeClinicalData && (
+                            <div className="pt-4 border-t-2 border-black">
+                              <ClinicianDetailView
+                                report={activeClinicalData}
+                                childInfo={{ name: item.child_name, age: item.age, gender: item.gender, grade: item.school_grade }}
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
 
