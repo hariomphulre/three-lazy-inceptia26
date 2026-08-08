@@ -24,13 +24,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "sessionId required" }, { status: 400 });
     }
 
-    // 1. Store report URL if provided
-    if (reportUrl) {
-      await pool.query(
-        `UPDATE child_assessment_features SET report_url = $1 WHERE id = $2`,
-        [reportUrl, sessionId]
-      );
-    }
+    // 1. Mark child_assessment_features as completed
+    await pool.query(
+      `UPDATE child_assessment_features
+          SET status = 'completed'${reportUrl ? ', report_url = $2' : ''}
+        WHERE id = $1`,
+      reportUrl ? [sessionId, reportUrl] : [sessionId]
+    );
 
     // 2. Mark student as completed (find by assessment_id)
     await pool.query(

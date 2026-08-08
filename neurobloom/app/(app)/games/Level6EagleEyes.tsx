@@ -49,7 +49,15 @@ export function Level6EagleEyes({ onComplete, onProgress }: Level6Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sessionId,
-        payload: payloadMap[currentGame]
+        payload: payloadMap[currentGame],
+        screening_task: {
+          task_id: `eagle-eyes-${currentGame + 1}`,
+          domain: "attention",
+          construct: "selective_attention",
+          task_type: "eagle_eyes",
+          response_data: { score, correct: isCorrect },
+          reaction_time_ms: timeTaken * 1000
+        }
       })
     });
 

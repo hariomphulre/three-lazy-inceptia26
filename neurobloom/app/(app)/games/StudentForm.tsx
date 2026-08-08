@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from "framer-motion";
 import { User, Calendar, Users, ArrowRight, ShieldCheck, Globe } from 'lucide-react';
 import { useVideo } from "@/context/VideoContext";
 import { useTranslation } from "@/hooks/useTranslation";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
-import { createSession } from "@/lib/offline/session";
 
 interface StudentFormProps {
   onNext: (data: StudentData) => void;
@@ -49,7 +48,7 @@ const GROUP_BADGE: Record<string, { label: string; color: string }> = {
   C: { label: "Group C · Ages 12+",  color: "bg-primary text-white"   },
 };
 
-export function StudentForm({ onNext, onBack }: StudentFormProps) {
+export function StudentForm({ onNext }: StudentFormProps) {
   const { t } = useTranslation();
   const { setSessionId } = useVideo();
   const [formData, setFormData] = useState<StudentData>({
@@ -60,6 +59,8 @@ export function StudentForm({ onNext, onBack }: StudentFormProps) {
     language: 'english',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const selectedGradeObj = GRADE_OPTIONS.find(g => g.value === formData.school_grade);
   const selectedGroup = selectedGradeObj?.group ?? null;
@@ -80,18 +81,27 @@ export function StudentForm({ onNext, onBack }: StudentFormProps) {
 
     setIsSubmitting(true);
     setSubmitError(null);
-    const res = await fetch("/api/session/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-    });
+    try {
+      const res = await fetch("/api/session/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      if (!res.ok) {
+        throw new Error(`Session creation failed with status ${res.status}`);
+      }
 
-    const { sessionId } = await res.json();
-    localStorage.setItem("sessionId", sessionId);
-    // Store grade so game components can resolve questionnaire group (A/B/C)
-    localStorage.setItem("student_grade", formData.school_grade);
-    setSessionId(sessionId);
-    onNext(formData);
+      const { sessionId } = await res.json();
+      localStorage.setItem("sessionId", sessionId);
+      // Store grade so game components can resolve questionnaire group (A/B/C)
+      localStorage.setItem("student_grade", formData.school_grade);
+      setSessionId(sessionId);
+      onNext(formData);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Failed to start assessment.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -258,6 +268,11 @@ export function StudentForm({ onNext, onBack }: StudentFormProps) {
                 All scores carry evidence status: <em>prototype_heuristic</em>.
               </p>
             </div>
+            {submitError && (
+              <div className="border-2 border-primary bg-primary/5 p-3">
+                <p className="text-primary text-xs font-black uppercase tracking-widest">{submitError}</p>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="pt-4 border-t-4 border-black flex items-center justify-between">
@@ -270,9 +285,10 @@ export function StudentForm({ onNext, onBack }: StudentFormProps) {
               <Button
                 type="submit"
                 size="lg"
+                disabled={isSubmitting}
                 className="py-8 px-10 text-lg uppercase italic shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
               >
-                {t('sf_launch')}
+                {isSubmitting ? "Launching..." : t('sf_launch')}
                 <ArrowRight size={20} className="ml-2" />
               </Button>
             </div>

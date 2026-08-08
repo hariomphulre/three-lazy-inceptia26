@@ -21,7 +21,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, Check, X } from "lucide-react";
+import { Brain, Zap, Check, X } from "lucide-react";
 import { useTranslation } from "@/hooks/useTranslation";
 
 interface Level7Props {

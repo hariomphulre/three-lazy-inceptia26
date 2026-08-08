@@ -80,7 +80,15 @@ export function Level4FeelingFriends({ onComplete, onProgress }: Level4Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sessionId,
-          payload: payloadMap[currentGame]
+          payload: payloadMap[currentGame],
+          screening_task: {
+            task_id: `feeling-friends-${currentGame + 1}`,
+            domain: "socioemotional",
+            construct: "emotion_recognition",
+            task_type: "feeling_friends",
+            response_data: { emotion: currentEmotion.emotion, face_index: faceIndex, correct: isCorrect, score },
+            reaction_time_ms: timeTaken * 1000
+          }
         })
       });
     } catch (error) {

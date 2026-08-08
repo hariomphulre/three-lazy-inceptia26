@@ -549,8 +549,17 @@ def eeg_analysis():
 # Full Report
 # ---------------------------------------------------------------------------
 
+LEGACY_PIPELINE_ENABLED = os.getenv("LEGACY_PIPELINE_ENABLED", "false").lower() == "true"
+
 @app.route("/predict/full_report", methods=["POST"])
+@app.route("/predict/full_report_final", methods=["POST"])
 def full_report():
+    if not LEGACY_PIPELINE_ENABLED:
+        return jsonify({
+            "error": "Legacy report pipeline is disabled. Use /predict/screening_ai/run instead.",
+            "status": "disabled"
+        }), 410
+
     body = request.get_json(silent=True) or {}
     session_id = body.get("session_id")
     if not session_id:
@@ -663,25 +672,67 @@ def screening_ai_run():
     Phase2.5 (deterministic aggregation) → Phase3 (narrative-only AI) and
     returns the full structured screening report.
 
-    Body schema:
-    {
-      "child_profile": { "id": str, "name": str, "age_years": int,
-                          "school_grade": str, "language": str },
-      "raw_responses":  { "reading": [...], "math": [...],
-                          "writing": [...], "attention": [...] },
-      "previous_phase_state": {}   // optional — for pipeline resume
-    }
-
-    Returns the structured JSON defined in screening_ai.run_full_pipeline.
-    All outputs carry evidence_status='prototype_heuristic' and rubric_version.
+    Accepts either full payload or bare {"session_id": "xxx"} (loads from DB).
     """
     body = request.get_json(silent=True) or {}
 
     child_profile = body.get("child_profile")
-    if not child_profile:
-        return jsonify({"error": "child_profile is required"}), 400
-
     raw_responses = body.get("raw_responses", {})
+    session_id = body.get("session_id") or (child_profile.get("id") if isinstance(child_profile, dict) else None)
+
+    # Auto-load child_profile and raw_responses from DB if session_id provided and missing
+    if session_id and (not child_profile or not raw_responses):
+        try:
+            from utils.db import get_conn
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    if not child_profile:
+                        cur.execute(
+                            "SELECT id, child_name, age, school_grade, language FROM child_assessment_features WHERE id = %s",
+                            [session_id]
+                        )
+                        p_row = cur.fetchone()
+                        if p_row:
+                            child_profile = {
+                                "id": str(p_row[0]),
+                                "name": p_row[1] or "child",
+                                "age_years": int(p_row[2] or 8),
+                                "school_grade": p_row[3] or "unknown",
+                                "language": p_row[4] or "english"
+                            }
+                    if not raw_responses:
+                        cur.execute(
+                            "SELECT domain, task_id, construct, task_type, response_json, reaction_time_ms FROM screening_responses WHERE session_id = %s ORDER BY created_at",
+                            [session_id]
+                        )
+                        s_rows = cur.fetchall()
+                        grouped = {}
+                        for dom, t_id, con, t_type, r_json, r_ms in s_rows:
+                            if dom not in grouped:
+                                grouped[dom] = []
+                            grouped[dom].append({
+                                "task_id": t_id,
+                                "construct": con,
+                                "task_type": t_type,
+                                "response_data": r_json,
+                                "reaction_time_ms": r_ms
+                            })
+                        raw_responses = grouped
+        except Exception as load_err:
+            logger.warning("DB fetch error in screening_ai_run for session %s: %s", session_id, load_err)
+
+    if not child_profile:
+        if session_id:
+            child_profile = {"id": session_id, "name": "child", "age_years": 8, "school_grade": "unknown", "language": "english"}
+        else:
+            return jsonify({"error": "child_profile or session_id is required"}), 400
+
+    pipeline_input = {
+        "child_profile": child_profile,
+        "raw_responses": raw_responses,
+        "previous_phase_state": body.get("previous_phase_state", {})
+    }
+
     if not any(raw_responses.values()):
         logger.warning(
             "Screening AI called with empty raw_responses for session %s",
@@ -689,15 +740,15 @@ def screening_ai_run():
         )
 
     try:
-        result = run_screening_pipeline(body)
+        result = run_screening_pipeline(pipeline_input)
     except Exception as exc:
         logger.exception("Screening AI pipeline error for session %s: %s",
                          child_profile.get("id"), exc)
         return jsonify({"error": f"Screening pipeline failed: {exc}"}), 500
 
     # ── Persist to screening_reports table (best-effort) ─────────────
-    session_id = child_profile.get("id")
-    if session_id:
+    report_session_id = child_profile.get("id")
+    if report_session_id:
         try:
             from utils.db import get_conn
             with get_conn() as conn:
@@ -714,7 +765,7 @@ def screening_ai_run():
                                 updated_at      = NOW()
                         """,
                         [
-                            session_id,
+                            report_session_id,
                             result.get("questionnaire_group"),
                             json.dumps(result.get("domain_scores", {})),
                             json.dumps(result.get("global_impression", {})),
@@ -725,7 +776,7 @@ def screening_ai_run():
                     conn.commit()
         except Exception as db_exc:
             logger.warning("Could not persist screening report for %s: %s",
-                           session_id, db_exc)
+                           report_session_id, db_exc)
             # Non-fatal — return result anyway
 
     return jsonify(result)

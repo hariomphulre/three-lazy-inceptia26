@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS child_assessment_features (
   test6_q3_time BIGINT, test6_q3_score BIGINT,
   test6_q4_time BIGINT, test6_q4_score BIGINT,
 
+  status TEXT DEFAULT 'in_progress',
   report_url TEXT,
   video_link TEXT,
   detected_disabilities TEXT,
@@ -134,7 +135,7 @@ CREATE TABLE IF NOT EXISTS doctor_requests (
   UNIQUE (student_id, doctor_id)   -- one request per student-doctor pair
 );
 
--- ─── Notify trigger (existing) ───────────────────────────────────────────────
+-- ─── Notify trigger (fires on completion) ───────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_neurobloom()
 RETURNS trigger AS $$
 BEGIN
@@ -143,8 +144,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+ALTER TABLE child_assessment_features ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'in_progress';
 DROP TRIGGER IF EXISTS new_child_trigger ON child_assessment_features;
-CREATE TRIGGER new_child_trigger
-AFTER INSERT ON child_assessment_features
-FOR EACH ROW
-EXECUTE FUNCTION notify_neurobloom();
+DROP TRIGGER IF EXISTS notify_on_completion ON child_assessment_features;
+CREATE TRIGGER notify_on_completion
+  AFTER UPDATE OF status ON child_assessment_features
+  FOR EACH ROW
+  WHEN (NEW.status = 'completed' AND OLD.status IS DISTINCT FROM 'completed')
+  EXECUTE FUNCTION notify_neurobloom();
+

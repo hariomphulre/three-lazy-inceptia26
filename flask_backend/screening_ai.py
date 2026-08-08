@@ -74,7 +74,9 @@ class _GroqKeyPool:
         """Return the next key in round-robin order."""
         if not self._keys:
             return ""
-        key = self._keys[self._idx % len(self._keys)]
+        idx = self._idx % len(self._keys)
+        key = self._keys[idx]
+        logger.info("[GroqKeyPool] Using key index %d of %d", idx, len(self._keys))
         self._idx += 1
         return key
 
@@ -561,6 +563,50 @@ def _build_image_requests(group: str, task_plan: dict) -> List[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Domain & Data Sufficiency Definitions
+# ---------------------------------------------------------------------------
+
+CORE_SLD_DOMAINS = ["reading", "math", "writing", "attention"]
+ALL_EXPECTED_DOMAINS = ["reading", "math", "writing", "attention", "socioemotional"]
+
+N_MIN_TASKS: Dict[str, int] = {
+    "reading": 3,
+    "math": 3,
+    "writing": 2,
+    "attention": 1,
+    "socioemotional": 1,
+}
+
+CONSTRUCT_WEIGHTS: Dict[str, Dict[str, float]] = {
+    "reading": {
+        "phonological_awareness": 0.35,
+        "decoding_fluency": 0.35,
+        "rapid_naming": 0.15,
+        "comprehension": 0.15,
+    },
+    "math": {
+        "number_sense": 0.30,
+        "number_line_representation": 0.25,
+        "arithmetic_fluency": 0.25,
+        "math_reasoning": 0.20,
+    },
+    "writing": {
+        "graphomotor_speed": 0.30,
+        "legibility": 0.25,
+        "visuomotor_integration": 0.25,
+        "written_expression_mechanics": 0.20,
+    },
+    "attention": {
+        "sustained_attention": 0.40,
+        "impulsivity_inhibition": 0.30,
+        "selective_attention": 0.30,
+    },
+    "socioemotional": {
+        "emotion_recognition": 1.0,
+    },
+}
+
+# ---------------------------------------------------------------------------
 # Phase 2 — Per-task AI scoring  +  Phase 2.5 — Deterministic aggregation
 # ---------------------------------------------------------------------------
 
@@ -593,19 +639,13 @@ def run_phase2(
     # ── Phase 2.5: deterministic aggregation (NEVER AI) ──────────────────
     domain_scores = _aggregate_scores(all_task_scores, group)
 
-    # Attach evidence metadata to every subscore
-    for ds in domain_scores.values():
-        for ss in ds.subscores.values():
-            ss.evidence_status = EVIDENCE_STATUS
-            ss.rubric_version  = SCORING_RUBRIC_VERSION
-
     phase_state["all_task_scores"] = [ts.to_dict() for ts in all_task_scores]
-    phase_state["domain_scores_raw"] = {k: v.to_dict() for k, v in domain_scores.items()}
+    phase_state["domain_scores_raw"] = domain_scores
 
     return {
         "phase": "PHASE_2",
         "questionnaire_group": group,
-        "domain_scores": {k: v.to_dict() for k, v in domain_scores.items()},
+        "domain_scores": domain_scores,
         "task_scores": [ts.to_dict() for ts in all_task_scores],
         "phase_state_for_resume": phase_state,
         "scoring_provider": provider.provider_name,
@@ -613,13 +653,10 @@ def run_phase2(
     }
 
 
-def _aggregate_scores(task_scores: List[TaskScore], group: str) -> Dict[str, DomainScore]:
+def _aggregate_scores(task_scores: List[TaskScore], group: str) -> Dict[str, dict]:
     """
-    Phase 2.5 — Deterministic weighted aggregation.
-    This code is the ONLY place that converts individual task scores into
-    domain-level composite scores. No LLM call is made here.
+    Phase 2.5 — Deterministic weighted aggregation with Data-Sufficiency Guard.
     """
-    # Bucket raw scores by (domain, construct)
     buckets: Dict[str, Dict[str, List[float]]] = {}
     flag_buckets: Dict[str, Dict[str, List[str]]] = {}
 
@@ -631,33 +668,56 @@ def _aggregate_scores(task_scores: List[TaskScore], group: str) -> Dict[str, Dom
         buckets.setdefault(dom, {}).setdefault(con, []).append(ts.raw_score)
         flag_buckets.setdefault(dom, {}).setdefault(con, []).extend(ts.flags)
 
-    domain_scores: Dict[str, DomainScore] = {}
+    all_domains = list(dict.fromkeys(CORE_SLD_DOMAINS + list(buckets.keys())))
+    domain_scores: Dict[str, dict] = {}
 
-    for domain, construct_scores in buckets.items():
+    for domain in all_domains:
+        construct_scores = buckets.get(domain, {})
+        total_tasks_in_domain = sum(len(s) for s in construct_scores.values())
+        min_required = N_MIN_TASKS.get(domain, 1)
+
+        # DATA-SUFFICIENCY GUARD
+        if total_tasks_in_domain < min_required:
+            domain_scores[domain] = {
+                "status": "insufficient_data",
+                "domain": domain,
+                "n_tasks": total_tasks_in_domain,
+                "composite_score": None,
+                "risk_level": None,
+                "subscores": None,
+                "justification": f"Insufficient data to assess {domain} (received {total_tasks_in_domain} valid tasks, minimum required is {min_required}).",
+                "suggested_followup": f"Complete assessment tasks for {domain}."
+            }
+            continue
+
         weights = CONSTRUCT_WEIGHTS.get(domain, {})
-        subscores: Dict[str, SubScore] = {}
+        subscores: Dict[str, dict] = {}
         composite_num = 0.0
         composite_den = 0.0
 
         for construct, scores in construct_scores.items():
             mean_score = statistics.mean(scores) if scores else 0.5
             unique_flags = list(set(flag_buckets.get(domain, {}).get(construct, [])))
-            subscores[construct] = SubScore(
-                construct=construct,
-                score_0_to_1=round(mean_score, 4),
-                n_tasks=len(scores),
-                flags=unique_flags,
-            )
+            subscores[construct] = {
+                "construct": construct,
+                "score_0_to_1": round(mean_score, 4),
+                "n_tasks": len(scores),
+                "flags": unique_flags,
+                "evidence_status": EVIDENCE_STATUS,
+                "rubric_version": SCORING_RUBRIC_VERSION,
+            }
             w = weights.get(construct, 1.0 / max(len(construct_scores), 1))
             composite_num += mean_score * w
             composite_den += w
 
         composite = composite_num / composite_den if composite_den > 0 else 0.5
-        domain_scores[domain] = DomainScore(
-            domain=domain,
-            subscores=subscores,
-            composite_score=round(composite, 4),
-        )
+        domain_scores[domain] = {
+            "status": "complete",
+            "domain": domain,
+            "n_tasks": total_tasks_in_domain,
+            "subscores": subscores,
+            "composite_score": round(composite, 4),
+        }
 
     return domain_scores
 
@@ -802,10 +862,10 @@ def run_phase3(
     # Merge narrative into domain_scores — but only text fields, never numbers
     merged = _merge_narrative(domain_scores_with_risk, narrative)
 
-    # Collect flags for formal assessment
+    # Collect flags for formal assessment (CORE SLD ONLY)
     flags = [
         f"{d}_risk" for d, ds in domain_scores_with_risk.items()
-        if ds.get("risk_level") in ("moderate", "high")
+        if d in CORE_SLD_DOMAINS and ds.get("risk_level") in ("moderate", "high")
     ]
 
     phase_state["phase3_complete"] = True
@@ -833,16 +893,30 @@ def _compute_risk_levels(domain_scores_dict: dict, group: str) -> dict:
     """
     result = {}
     for domain, ds in domain_scores_dict.items():
+        if ds.get("status") == "insufficient_data" or ds.get("composite_score") is None:
+            result[domain] = {**ds, "risk_level": None}
+            continue
+
+        if domain == "socioemotional":
+            result[domain] = {
+                **ds,
+                "risk_level": None,
+                "justification": ds.get("justification", "Socioemotional screening component completed."),
+            }
+            continue
+
         domain_thresholds = THRESHOLDS.get(domain, {})
-        subscores = ds.get("subscores", {})
+        subscores = ds.get("subscores") or {}
         composite = ds.get("composite_score", 0.5)
 
         # Check subscores individually for any construct-level flags
         worst_construct_score = 1.0
-        for construct, ss in subscores.items():
-            score = ss.get("score_0_to_1", 0.5)
-            if score < worst_construct_score:
-                worst_construct_score = score
+        if isinstance(subscores, dict):
+            for construct, ss in subscores.items():
+                if isinstance(ss, dict):
+                    score = ss.get("score_0_to_1", 0.5)
+                    if score < worst_construct_score:
+                        worst_construct_score = score
 
         # Use the lower of composite or worst subscore (conservative)
         effective_score = min(composite, worst_construct_score)
@@ -873,13 +947,22 @@ def _merge_narrative(domain_scores: dict, narrative: dict) -> dict:
     narrative_domains = narrative.get("domain_scores", {})
     merged = {}
     for domain, ds in domain_scores.items():
+        if ds.get("status") == "insufficient_data":
+            merged[domain] = {
+                **ds,
+                "justification": ds.get("justification", "Insufficient data recorded for this domain."),
+                "suggested_followup": ds.get("suggested_followup", "Complete tasks for this domain."),
+                "risk_level": None,
+                "composite_score": None,
+            }
+            continue
+
         nd = narrative_domains.get(domain, {})
         merged[domain] = {
             **ds,
-            "justification":      nd.get("justification", ""),
-            "suggested_followup": nd.get("suggested_followup", ""),
-            # Ensure risk_level is never overwritten
-            "risk_level": ds.get("risk_level", "unknown"),
+            "justification":      nd.get("justification", ds.get("justification", "")),
+            "suggested_followup": nd.get("suggested_followup", ds.get("suggested_followup", "")),
+            "risk_level":         ds.get("risk_level"),
         }
     return merged
 
@@ -888,7 +971,7 @@ def _fallback_phase3(domain_scores: dict, group: str, child_profile: dict, phase
     """Minimal fallback when AI is unavailable."""
     flags = [
         f"{d}_risk" for d, ds in domain_scores.items()
-        if ds.get("risk_level") in ("moderate", "high")
+        if d in CORE_SLD_DOMAINS and ds.get("risk_level") in ("moderate", "high")
     ]
     return {
         "phase": "PHASE_3",

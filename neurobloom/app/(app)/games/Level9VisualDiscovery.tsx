@@ -33,6 +33,24 @@ export function Level9VisualDiscovery({ onComplete, onProgress, phase = 0 }: Lev
     const isCorrect = opt === current.correct;
     setFeedback(isCorrect ? "correct" : "wrong");
     if (isCorrect) setScore((s) => s + 1);
+    const sessionId = typeof window !== 'undefined' ? localStorage.getItem("sessionId") : null;
+    if (sessionId) {
+      fetch("/api/session/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          screening_task: {
+            task_id: `visual-discovery-${round + 1}`,
+            domain: "reading",
+            construct: "comprehension",
+            task_type: "visual_discovery",
+            response_data: { target: current.target, chosen: opt, correct: isCorrect },
+            reaction_time_ms: 1200
+          }
+        })
+      }).catch((e) => console.warn("Failed to save Level9 progress:", e));
+    }
     setTimeout(() => {
       setFeedback(null);
       if (round < ROUNDS.length - 1) {

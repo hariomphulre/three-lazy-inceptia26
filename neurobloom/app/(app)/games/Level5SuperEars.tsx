@@ -72,7 +72,18 @@ export function Level5SuperEars({ onComplete, onProgress }: Level5Props) {
     await fetch("/api/session/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, payload })
+      body: JSON.stringify({
+        sessionId,
+        payload,
+        screening_task: {
+          task_id: `super-ears-word-${currentGame}`,
+          domain: "reading",
+          construct: "phonological_awareness",
+          task_type: "super_ears",
+          response_data: { score, correct: score === 1 },
+          reaction_time_ms: timeTaken * 1000
+        }
+      })
     });
 
     setTimeout(() => {
@@ -121,6 +132,9 @@ export function Level5SuperEars({ onComplete, onProgress }: Level5Props) {
           }
 
           const sessionId = localStorage.getItem("sessionId");
+          const avgReactionMs = reactions.current.length > 0
+            ? Math.round(reactions.current.reduce((a, b) => a + b, 0) / reactions.current.length)
+            : 1500;
           await fetch("/api/session/save", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -132,6 +146,14 @@ export function Level5SuperEars({ onComplete, onProgress }: Level5Props) {
                 test5_q1_r3: reactions.current[2] || null,
                 test5_q1_r4: reactions.current[3] || null,
                 test5_q1_r5: reactions.current[4] || null,
+              },
+              screening_task: {
+                task_id: "super-ears-beeps-1",
+                domain: "reading",
+                construct: "phonological_awareness",
+                task_type: "super_ears",
+                response_data: { reactions_ms: reactions.current },
+                reaction_time_ms: avgReactionMs
               }
             })
           });

@@ -22,13 +22,13 @@ while True:
         notify = conn.notifies.pop(0)
         session_id = notify.payload
 
-        print("📩 New child inserted:", session_id)
+        print("📩 Session completed notification:", session_id)
 
         try:
             requests.post(
-                "http://localhost:5000/predict/full_report_final",
+                "http://localhost:5000/predict/screening_ai/run",
                 json={"session_id": session_id},
-                timeout=20
+                timeout=600
             )
         except Exception as e:
-            print("Pipeline error:", e)
+            print("Screening AI pipeline trigger error:", e)

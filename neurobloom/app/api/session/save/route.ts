@@ -28,6 +28,15 @@ import { pool } from "@/lib/db";
  *     }
  *   }
  */
+function sanitizeReactionTimeMs(val: any): number | null {
+  if (val === null || val === undefined || isNaN(Number(val))) return null;
+  let ms = Math.floor(Number(val));
+  if (ms < 0) return 0;
+  // If timestamp > 5 minutes, cap to 3000ms safe default to prevent integer overflow
+  if (ms > 300000) return 3000;
+  return Math.min(ms, 2147483647);
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -61,7 +70,8 @@ export async function POST(req: Request) {
         const timeKey = keys.find(k => k.endsWith("_time"));
         const rawScore = scoreKey ? Number(payload[scoreKey]) : 0.5;
         const isCorrect = rawScore >= 1;
-        const reactionMs = timeKey ? Number(payload[timeKey]) * 1000 : 3000;
+        const rawTimeVal = timeKey ? payload[timeKey] : 3;
+        const reactionMs = sanitizeReactionTimeMs(Number(rawTimeVal) < 1000 ? Number(rawTimeVal) * 1000 : rawTimeVal) ?? 3000;
 
         if (firstKey.startsWith("test1_")) {
           actualScreeningTask = {
@@ -89,6 +99,15 @@ export async function POST(req: Request) {
             task_type: "writing_wizard",
             response_data: { image_submitted: true, correct: true },
             reaction_time_ms: 3000,
+          };
+        } else if (firstKey.startsWith("test4_")) {
+          actualScreeningTask = {
+            task_id: `socioemotional-auto-${firstKey}`,
+            domain: "socioemotional",
+            construct: "emotion_recognition",
+            task_type: "feeling_friends",
+            response_data: { correct: isCorrect, raw_score: rawScore },
+            reaction_time_ms: reactionMs,
           };
         } else if (firstKey.startsWith("test5_") || firstKey.startsWith("test6_")) {
           actualScreeningTask = {
@@ -143,7 +162,7 @@ export async function POST(req: Request) {
           sessionId, task_id, domain, construct, task_type,
           questionnaire_group, row.age ?? null, row.school_grade ?? null,
           row.language ?? null,
-          JSON.stringify(response_data ?? {}), reaction_time_ms ?? null,
+          JSON.stringify(response_data ?? {}), sanitizeReactionTimeMs(reaction_time_ms),
         ]
       );
     }

@@ -14,7 +14,7 @@ import { getAuthPayload } from "@/app/api/auth/me/route";
  * new assessment_id on it — so teachers can see the status change immediately.
  */
 export async function POST(req: Request) {
-  const { name, age, gender, school_grade, language } = await req.json();
+  const { name, age, gender, school_grade, language, studentId } = await req.json();
 
   // Create the assessment row (school_grade + language added for screening engine)
   const result = await pool.query(

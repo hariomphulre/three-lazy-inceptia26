@@ -34,6 +34,24 @@ export function Level8ClarityQuest({ onComplete, onProgress, phase = 0 }: Level8
     setTimeout(() => {
       setRecording(false);
       setShowFeedback(true);
+      const sessionId = typeof window !== 'undefined' ? localStorage.getItem("sessionId") : null;
+      if (sessionId) {
+        fetch("/api/session/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            screening_task: {
+              task_id: `clarity-quest-${idx + 1}`,
+              domain: "reading",
+              construct: "phonological_awareness",
+              task_type: "clarity_quest",
+              response_data: { word: word.dispKey, syllables: word.syllables, spoken: true },
+              reaction_time_ms: 2000
+            }
+          })
+        }).catch((e) => console.warn("Failed to save Level8 progress:", e));
+      }
       setTimeout(() => {
         setShowFeedback(false);
         if (idx < WORDS.length - 1) {
