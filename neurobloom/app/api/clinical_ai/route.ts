@@ -196,8 +196,31 @@ export async function GET(req: Request) {
     }
 
     const row = result.rows[0];
+
+    const profileRes = await pool.query(
+      `SELECT child_name, age, gender, school_grade, language FROM child_assessment_features WHERE id = $1 LIMIT 1`,
+      [sessionId]
+    );
+    const profile = profileRes.rows[0] ?? {};
+
+    const rawTasksRes = await pool.query(
+      `SELECT task_id, domain, construct, task_type, response_json, reaction_time_ms, created_at
+         FROM screening_responses
+        WHERE session_id = $1
+        ORDER BY created_at`,
+      [sessionId]
+    );
+
     return NextResponse.json({
       session_id: row.session_id,
+      child_profile: {
+        id: row.session_id,
+        name: profile.child_name ?? "child",
+        age: profile.age ?? 8,
+        gender: profile.gender ?? "unknown",
+        school_grade: profile.school_grade ?? "unknown",
+        language: profile.language ?? "english",
+      },
       questionnaire_group: row.questionnaire_group,
       domain_scores: row.domain_scores,
       narrative: row.narrative,
@@ -207,6 +230,7 @@ export async function GET(req: Request) {
       evidence_status: row.evidence_status,
       rubric_version: row.rubric_version,
       scoring_provider: row.scoring_provider,
+      raw_task_responses: rawTasksRes.rows,
       created_at: row.created_at,
       updated_at: row.updated_at,
     });

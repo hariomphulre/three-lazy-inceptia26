@@ -889,52 +889,112 @@ def run_phase3(
 def _compute_risk_levels(domain_scores_dict: dict, group: str) -> dict:
     """
     Deterministically assign risk_level to each domain based on composite_score
-    and THRESHOLDS. This is pure Python math — no AI.
+    and construct-specific THRESHOLDS.
+    Attaches driving_construct, driving_subscore, driving_threshold, and driving_reason.
     """
     result = {}
     for domain, ds in domain_scores_dict.items():
         if ds.get("status") == "insufficient_data" or ds.get("composite_score") is None:
-            result[domain] = {**ds, "risk_level": None}
+            result[domain] = {
+                **ds,
+                "risk_level": None,
+                "driving_construct": None,
+                "driving_reason": "Insufficient data to determine risk level."
+            }
             continue
 
         if domain == "socioemotional":
             result[domain] = {
                 **ds,
                 "risk_level": None,
+                "driving_construct": None,
+                "driving_reason": "Socioemotional screening component completed (supplementary context).",
                 "justification": ds.get("justification", "Socioemotional screening component completed."),
             }
             continue
 
         domain_thresholds = THRESHOLDS.get(domain, {})
         subscores = ds.get("subscores") or {}
-        composite = ds.get("composite_score", 0.5)
+        composite = float(ds.get("composite_score", 0.5))
 
-        # Check subscores individually for any construct-level flags
-        worst_construct_score = 1.0
-        if isinstance(subscores, dict):
-            for construct, ss in subscores.items():
-                if isinstance(ss, dict):
-                    score = ss.get("score_0_to_1", 0.5)
-                    if score < worst_construct_score:
-                        worst_construct_score = score
+        # Check all construct thresholds
+        construct_risks = []
+        worst_gap = 0.0
+        primary_driver = None
+        driver_score_pct = 0
+        driver_thresh_pct = 0
 
-        # Use the lower of composite or worst subscore (conservative)
-        effective_score = min(composite, worst_construct_score)
-
-        # Derive thresholds from construct averages
-        all_low  = [v.get("low_risk", 0.80) for v in domain_thresholds.values() if isinstance(v, dict)]
-        all_mod  = [v.get("moderate_risk", 0.55) for v in domain_thresholds.values() if isinstance(v, dict)]
+        # Calculate average domain thresholds for composite evaluation
+        all_low  = [v.get("low_risk", 0.75) for v in domain_thresholds.values() if isinstance(v, dict)]
+        all_mod  = [v.get("moderate_risk", 0.50) for v in domain_thresholds.values() if isinstance(v, dict)]
         low_thresh = statistics.mean(all_low) if all_low else 0.75
         mod_thresh = statistics.mean(all_mod) if all_mod else 0.50
 
-        if effective_score >= low_thresh:
-            risk = "low"
-        elif effective_score >= mod_thresh:
-            risk = "moderate"
-        else:
-            risk = "high"
+        if isinstance(subscores, dict):
+            for c_name, ss in subscores.items():
+                if not isinstance(ss, dict):
+                    continue
+                score = float(ss.get("score_0_to_1", 0.5))
+                c_thresh = domain_thresholds.get(c_name, {})
+                c_low = float(c_thresh.get("low_risk", low_thresh)) if isinstance(c_thresh, dict) else low_thresh
+                c_mod = float(c_thresh.get("moderate_risk", mod_thresh)) if isinstance(c_thresh, dict) else mod_thresh
 
-        result[domain] = {**ds, "risk_level": risk}
+                if score < c_mod:
+                    c_risk = "high"
+                    gap = c_low - score
+                elif score < c_low:
+                    c_risk = "moderate"
+                    gap = c_low - score
+                else:
+                    c_risk = "low"
+                    gap = 0.0
+
+                construct_risks.append((c_risk, gap, c_name, score, c_low))
+
+                if gap > worst_gap:
+                    worst_gap = gap
+                    primary_driver = c_name
+                    driver_score_pct = round(score * 100)
+                    driver_thresh_pct = round(c_low * 100)
+
+        # Check composite score risk
+        if composite < mod_thresh:
+            composite_risk = "high"
+        elif composite < low_thresh:
+            composite_risk = "moderate"
+        else:
+            composite_risk = "low"
+
+        # Determine overall domain risk: highest severity among constructs and composite
+        all_risks = [r[0] for r in construct_risks] + [composite_risk]
+        if "high" in all_risks:
+            domain_risk = "high"
+        elif "moderate" in all_risks:
+            domain_risk = "moderate"
+        else:
+            domain_risk = "low"
+
+        # Build driving_reason explanation
+        if domain_risk == "low":
+            driving_construct = None
+            driving_reason = f"All subscores passed expected thresholds for Group {group}."
+        else:
+            if primary_driver:
+                readable_c = primary_driver.replace("_", " ").title()
+                driving_construct = primary_driver
+                driving_reason = f"Flagged due to {readable_c} ({driver_score_pct}%, below {driver_thresh_pct}% threshold for Group {group})."
+            else:
+                driving_construct = "composite"
+                comp_pct = round(composite * 100)
+                comp_thresh_pct = round(low_thresh * 100)
+                driving_reason = f"Flagged due to Overall Composite Score ({comp_pct}%, below {comp_thresh_pct}% threshold for Group {group})."
+
+        result[domain] = {
+            **ds,
+            "risk_level": domain_risk,
+            "driving_construct": driving_construct,
+            "driving_reason": driving_reason,
+        }
 
     return result
 

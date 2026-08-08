@@ -8,6 +8,7 @@ import { useVideo } from "@/context/VideoContext";
 import { useTranslation } from "@/hooks/useTranslation";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
+import { ParentSummaryView } from "@/components/ParentSummaryView";
 
 interface TestCompleteProps {
   studentData: StudentData;
@@ -218,103 +219,8 @@ export function TestComplete({ studentData, onReturnHome }: TestCompleteProps) {
                   key="results"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="space-y-5"
                 >
-                  {/* Domain cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {Object.entries(report.domain_scores ?? {}).map(([domain, ds]) => {
-                      const risk   = (RISK_STYLES[ds.risk_level as RiskLevel] ? ds.risk_level as RiskLevel : "unknown");
-                      const styles = RISK_STYLES[risk] ?? RISK_STYLES["unknown"];
-                      const pct    = Math.round((ds.composite_score ?? 0.5) * 100);
-                      return (
-                        <motion.div
-                          key={domain}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                        >
-                          {/* Domain header */}
-                          <div className={`flex items-center justify-between px-4 py-2 border-b-4 border-black ${styles.bg}`}>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xl">{DOMAIN_ICONS[domain] ?? "🎯"}</span>
-                              <span className={`font-black uppercase text-sm tracking-widest ${risk === "moderate" ? "text-black" : "text-white"}`}>
-                                {domain}
-                              </span>
-                            </div>
-                            <div className={`flex items-center gap-1.5 px-2 py-0.5 bg-black/20 border border-black/20`}>
-                              {styles.icon}
-                              <span className={`text-[10px] font-black uppercase ${risk === "moderate" ? "text-black" : "text-white"}`}>
-                                {styles.label}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Score bar */}
-                          <div className="p-4 bg-white space-y-3">
-                            <div className="space-y-1">
-                              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-black/40">
-                                <span>Composite score</span><span>{pct}%</span>
-                              </div>
-                              <div className="h-2 bg-muted border-2 border-black">
-                                <motion.div
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${pct}%` }}
-                                  transition={{ delay: 0.3, duration: 0.6 }}
-                                  className={`h-full ${styles.bg}`}
-                                />
-                              </div>
-                            </div>
-
-                            {ds.justification && (
-                              <p className="text-black text-xs font-bold leading-snug">{ds.justification}</p>
-                            )}
-                            {ds.suggested_followup && (
-                              <p className="text-black/50 text-[10px] font-bold uppercase leading-snug border-t border-black/10 pt-2">
-                                💡 {ds.suggested_followup}
-                              </p>
-                            )}
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Global pattern */}
-                  {report.global_impression?.overall_pattern && (
-                    <div className="bg-muted border-4 border-black p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-black/40 mb-1">Overall pattern</p>
-                      <p className="text-black text-sm font-bold">{report.global_impression.overall_pattern}</p>
-                    </div>
-                  )}
-
-                  {/* Parent notes */}
-                  {report.global_impression?.notes_for_parent && (
-                    <div className="bg-accent border-4 border-black p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-black mb-1">For Parents</p>
-                      <p className="text-black text-sm font-bold">{report.global_impression.notes_for_parent}</p>
-                    </div>
-                  )}
-
-                  {/* Formal assessment flags */}
-                  {flaggedDomains.length > 0 && (
-                    <div className="bg-[#E52521] border-4 border-black p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                      <p className="text-white text-xs font-black uppercase tracking-widest mb-2">
-                        ⚠ Recommended for formal assessment
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {flaggedDomains.map(f => (
-                          <span key={f} className="bg-white text-[#E52521] border-2 border-white px-3 py-1 text-xs font-black uppercase">
-                            {f.replace("_risk", "")}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Disclaimer */}
-                  <p className="text-[10px] font-black uppercase tracking-widest text-black/30 text-center leading-relaxed border-t-2 border-black/10 pt-4">
-                    ⚠️ {report.disclaimer ?? "Screening aid only. Not a clinical diagnosis. Consult a qualified psychologist or special educator."}
-                  </p>
+                  <ParentSummaryView report={report} />
                 </motion.div>
               )}
 
