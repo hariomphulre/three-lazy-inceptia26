@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Stethoscope, ChevronDown, ChevronUp, Check, X,
   FileDown, RefreshCw, MessageSquare, Send,
-  Clock, Users, ClipboardList, AlertCircle, Activity
+  Clock, Users, ClipboardList, AlertCircle, Activity,
+  Coins, Star, Save
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/context/AuthContext";
@@ -102,7 +103,61 @@ export default function DoctorDashboard() {
     } finally { setLoadingCases(false); }
   }, []);
 
-  useEffect(() => { fetchRequests(); fetchCases(); }, [fetchRequests, fetchCases]);
+interface DoctorReview {
+  id: string;
+  rating: number;
+  review?: string;
+  created_at: string;
+  reviewer_name: string;
+}
+
+  // Doctor profile & fee settings state
+  const [consultingFee, setConsultingFee] = useState<string>("");
+  const [avgRating, setAvgRating] = useState<number>(0);
+  const [ratingCount, setRatingCount] = useState<number>(0);
+  const [patientReviews, setPatientReviews] = useState<DoctorReview[]>([]);
+  const [feeSaving, setFeeSaving] = useState<boolean>(false);
+  const [feeMsg, setFeeMsg] = useState<string>("");
+  const [feeErr, setFeeErr] = useState<string>("");
+
+  const fetchProfile = useCallback(async () => {
+    try {
+      const res = await fetch("/api/doctor/profile");
+      if (res.ok) {
+        const data = await res.json();
+        setConsultingFee(data.consulting_fee ? String(data.consulting_fee) : "0");
+        setAvgRating(Number(data.avg_rating) || 0);
+        setRatingCount(Number(data.rating_count) || 0);
+        setPatientReviews(data.reviews || []);
+      }
+    } catch {}
+  }, []);
+
+  const handleSaveFee = async () => {
+    setFeeSaving(true);
+    setFeeMsg("");
+    setFeeErr("");
+    try {
+      const res = await fetch("/api/doctor/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consulting_fee: Number(consultingFee) || 0 }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFeeErr(data.error || "Failed to update fee");
+      } else {
+        setFeeMsg("Consulting fee updated!");
+        setTimeout(() => setFeeMsg(""), 4000);
+      }
+    } catch (e: any) {
+      setFeeErr(e.message || "Failed to update fee");
+    } finally {
+      setFeeSaving(false);
+    }
+  };
+
+  useEffect(() => { fetchRequests(); fetchCases(); fetchProfile(); }, [fetchRequests, fetchCases, fetchProfile]);
 
   const handleRespond = async (id: string, status: "accepted" | "rejected") => {
     setProcessingId(id);
@@ -170,6 +225,113 @@ export default function DoctorDashboard() {
         </div>
 
         <div className="flex-1 px-6 sm:px-8 py-6 overflow-y-auto">
+          {/* Doctor Fee & Rating Overview Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-6 mb-8"
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 text-primary font-black uppercase text-xs tracking-widest mb-1">
+                  <Coins size={16} /> Consulting Fee & Rating Profile
+                </div>
+                <h2 className="text-xl font-black text-black uppercase tracking-tight">Set Your Consultation Charges</h2>
+                <p className="text-xs text-black/60 font-bold mt-0.5">
+                  Set the consultation fee that parents and patients will see when searching for doctors & specialists.
+                </p>
+
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3.5 font-black text-black text-sm">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={consultingFee}
+                      onChange={(e) => setConsultingFee(e.target.value)}
+                      placeholder="0"
+                      className="w-36 pl-8 pr-4 py-2.5 border-4 border-black font-black text-base focus:bg-accent focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    />
+                  </div>
+                  <button
+                    onClick={handleSaveFee}
+                    disabled={feeSaving}
+                    className="flex items-center gap-2 px-5 py-3 bg-primary text-white border-4 border-black font-black uppercase tracking-widest text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all disabled:opacity-40"
+                  >
+                    {feeSaving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                    Save Fee
+                  </button>
+
+                  {feeMsg && (
+                    <span className="flex items-center gap-1.5 px-3 py-2 bg-[#43B047]/10 text-[#43B047] border-2 border-[#43B047] text-xs font-black uppercase">
+                      <Check size={14} /> {feeMsg}
+                    </span>
+                  )}
+                  {feeErr && (
+                    <span className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-[#E52521] border-2 border-[#E52521] text-xs font-black uppercase">
+                      <AlertCircle size={14} /> {feeErr}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="border-4 border-black bg-muted p-4 md:w-64 flex flex-col items-center justify-center text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <p className="text-[10px] font-black uppercase tracking-widest text-black/40 mb-1">Your Rating</p>
+                <div className="flex items-center gap-1.5 my-1">
+                  <span className="text-3xl font-black text-black">{avgRating.toFixed(1)}</span>
+                  <div className="flex flex-col items-start">
+                    <div className="flex items-center text-[#FBD000]">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          size={16}
+                          className={star <= Math.round(avgRating) ? "fill-[#FBD000] text-black stroke-[1.5]" : "text-black/20"}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[10px] font-black text-black/50">{ratingCount} {ratingCount === 1 ? "review" : "reviews"}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* User Reviews List */}
+            {patientReviews.length > 0 && (
+              <div className="mt-6 pt-4 border-t-2 border-black/10">
+                <p className="text-xs font-black uppercase tracking-widest text-black/60 mb-3 flex items-center gap-2">
+                  <MessageSquare size={14} className="text-primary" /> Patient Ratings & Written Reviews ({patientReviews.length})
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-1">
+                  {patientReviews.map((rev) => (
+                    <div key={rev.id} className="border-2 border-black p-3 bg-muted/40 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="font-black text-xs uppercase text-black">{rev.reviewer_name}</span>
+                        <div className="flex items-center text-[#FBD000]">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              size={12}
+                              className={star <= rev.rating ? "fill-[#FBD000] text-black stroke-[1]" : "text-black/20"}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      {rev.review ? (
+                        <p className="text-xs text-black/80 italic font-medium">&quot;{rev.review}&quot;</p>
+                      ) : (
+                        <p className="text-[10px] text-black/40 font-bold uppercase tracking-wider">Star rating submitted</p>
+                      )}
+                      <p className="text-[9px] text-black/30 font-bold text-right mt-1">
+                        {new Date(rev.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </motion.div>
+
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4 mb-8">
             {[
