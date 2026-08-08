@@ -7,28 +7,74 @@ import { getAuthPayload } from "@/app/api/auth/me/route";
 const FLASK_BASE = process.env.FLASK_URL ?? "http://localhost:5000";
 
 /**
+ * Server-side authorization check for child session reports:
+ *  - Doctor/psychologist: Authorized if student is linked via accepted doctor_request.
+ *  - Teacher: Authorized if student is assigned to this teacher.
+ *  - Parent/educator/researcher: Authorized if student is linked to parent account or active testing session.
+ */
+async function verifyChildSessionAccess(userId: string, role: string, sessionId: string): Promise<boolean> {
+  if (role === "doctor" || role === "psychologist") {
+    const r = await pool.query(
+      `SELECT 1 FROM students s
+       JOIN doctor_requests dr ON dr.student_id = s.id
+       WHERE dr.doctor_id = $1 AND dr.status = 'accepted' AND s.assessment_id::text = $2`,
+      [userId, sessionId]
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  if (role === "teacher") {
+    const r = await pool.query(
+      `SELECT 1 FROM students s
+       WHERE s.teacher_id = $1 AND s.assessment_id::text = $2`,
+      [userId, sessionId]
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  if (["parent", "educator", "researcher"].includes(role)) {
+    const r = await pool.query(
+      `SELECT 1 FROM students s
+       WHERE s.user_id = $1 AND s.assessment_id::text = $2`,
+      [userId, sessionId]
+    );
+    if ((r.rowCount ?? 0) > 0) return true;
+
+    // Fallback: Check if session row exists in child_assessment_features
+    const caf = await pool.query(
+      `SELECT 1 FROM public.child_assessment_features WHERE id::text = $1`,
+      [sessionId]
+    );
+    return (caf.rowCount ?? 0) > 0;
+  }
+
+  return false;
+}
+
+/**
  * POST /api/clinical_ai
  *
  * Frontend-facing proxy for the Research-Aligned Screening Engine.
- * Accepts:
- *   { sessionId: string, raw_responses?: object, previous_phase_state?: object }
- *
- * Actions:
- *  1. Fetches child profile (name, age, school_grade, language) from DB
- *  2. Builds the input_json for the Flask pipeline
- *  3. Calls POST http://localhost:5000/predict/screening_ai/run (server-side only)
- *  4. Returns the full structured screening report to the client
- *
- * NOTE: This is a screening aid, not a clinical diagnostic tool.
- * All outputs carry evidence_status='prototype_heuristic'.
+ * Enforces server-side authorization check before pipeline execution.
  */
 export async function POST(req: Request) {
+  const auth = await getAuthPayload(req);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
     const { sessionId, raw_responses = {}, previous_phase_state = {} } = body;
 
     if (!sessionId) {
       return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
+    }
+
+    // Server-side authorization check
+    const isAuthorized = await verifyChildSessionAccess(auth.userId, auth.role, sessionId);
+    if (!isAuthorized) {
+      return NextResponse.json({ error: "Forbidden: You do not have access to this report" }, { status: 403 });
     }
 
     // ── 1. Fetch child profile from DB ──────────────────────────────────
@@ -90,16 +136,12 @@ export async function POST(req: Request) {
     };
 
     // ── 4. Fire-and-forget: kick off Flask pipeline without waiting ───────
-    // The LLM pipeline can take 3-10 minutes (Groq rate-limit sleeps per task).
-    // We return 202 immediately so the HTTP connection doesn't time out.
-    // TestComplete.tsx polls GET /api/clinical_ai until the result appears.
     void (async () => {
       try {
         const flaskResp = await fetch(`${FLASK_BASE}/predict/screening_ai/run`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify(pipelineInput),
-          // 10-minute ceiling — enough for the longest Group A session (6 tasks × ~35s each)
           signal:  AbortSignal.timeout(600_000),
         });
 
@@ -134,13 +176,12 @@ export async function POST(req: Request) {
         );
         console.log(`[clinical_ai] ✅ Report saved for session ${sessionId}`);
 
-        // ── 6. Optionally link screening flags to authenticated user ──────
-        const auth = await getAuthPayload(req).catch(() => null);
-        if (auth && result.flags_for_formal_assessment?.length > 0) {
+        // ── 6. Optionally link screening flags to student record ────────
+        if (result.flags_for_formal_assessment?.length > 0) {
           pool.query(
             `UPDATE students
                 SET screening_flags = $1::text[]
-              WHERE assessment_id = $2`,
+              WHERE assessment_id::text = $2`,
             [result.flags_for_formal_assessment, sessionId]
           ).catch((e: Error) => console.warn("[clinical_ai] flag update skipped:", e.message));
         }
@@ -149,7 +190,6 @@ export async function POST(req: Request) {
       }
     })();
 
-    // Return 202 immediately — frontend polls GET until report is ready
     return NextResponse.json(
       { accepted: true, message: "Screening pipeline started. Poll GET /api/clinical_ai?sessionId=... for results." },
       { status: 202 }
@@ -166,15 +206,26 @@ export async function POST(req: Request) {
 /**
  * GET /api/clinical_ai?sessionId=xxx
  *
- * Fetch a previously stored screening report for a session.
- * Returns 200 with { pending: true } while report calculation is in progress.
+ * Fetch stored screening report for a session.
+ * Enforces server-side authorization: returns 401 if unauthenticated and 403 if unauthorized.
  */
 export async function GET(req: Request) {
+  const auth = await getAuthPayload(req);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get("sessionId");
 
   if (!sessionId) {
     return NextResponse.json({ error: "sessionId query param required" }, { status: 400 });
+  }
+
+  // Enforce server-side role-based authorization check
+  const isAuthorized = await verifyChildSessionAccess(auth.userId, auth.role, sessionId);
+  if (!isAuthorized) {
+    return NextResponse.json({ error: "Forbidden: You do not have access to this report" }, { status: 403 });
   }
 
   try {
@@ -234,9 +285,10 @@ export async function GET(req: Request) {
       created_at: row.created_at,
       updated_at: row.updated_at,
     });
-  } catch (err) {
+  } catch (error) {
+    console.error("Postgres error fetching report:", error);
     return NextResponse.json(
-      { error: "DB error", detail: String(err) },
+      { error: "Failed to fetch report" },
       { status: 500 }
     );
   }
