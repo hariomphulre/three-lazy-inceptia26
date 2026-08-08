@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Stethoscope, ChevronDown, ChevronUp, Check, X,
   FileDown, RefreshCw, MessageSquare, Send,
   Clock, Users, ClipboardList, AlertCircle, Activity,
-  Coins, Star, Save
+  Coins, Star, Save, CheckCircle, AlertTriangle, FileText,
+  Search, ArrowLeft, SlidersHorizontal, ArrowUpDown, Brain, BookOpen, PenTool, Calculator
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/context/AuthContext";
@@ -51,41 +52,82 @@ interface Note {
   created_at: string;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  not_started: "bg-gray-100 text-black",
-  in_progress: "bg-[#FBD000] text-black",
-  completed: "bg-[#43B047] text-white",
-  pending: "bg-[#FBD000] text-black",
-  accepted: "bg-[#43B047] text-white",
-  rejected: "bg-[#E52521] text-white",
+interface AssessmentReport {
+  id: string;
+  child_name: string;
+  gender: string;
+  age: number;
+  report_url: string;
+  school_grade?: string;
+  language?: string;
+  created_at?: string;
+  domain_scores?: Record<string, { composite_score: number; risk_level: string }> | null;
+  flags_for_assessment?: string[] | null;
+  evidence_status?: string;
+  questionnaire_group?: string;
+  screening_updated_at?: string;
+}
+
+interface DoctorReview {
+  id: string;
+  rating: number;
+  review?: string;
+  created_at: string;
+  reviewer_name: string;
+}
+
+const RISK_CONFIG: Record<string, { label: string; color: string; badge: string }> = {
+  low: { label: "Low Risk", color: "bg-[#43B047] text-white", badge: "bg-[#43B047]/10 text-[#43B047] border-[#43B047]" },
+  moderate: { label: "Monitor", color: "bg-[#FBD000] text-black", badge: "bg-[#FBD000]/10 text-black border-[#FBD000]" },
+  high: { label: "Follow Up", color: "bg-[#E52521] text-white", badge: "bg-[#E52521]/10 text-[#E52521] border-[#E52521]" },
+  unknown: { label: "Pending", color: "bg-black/10 text-black/40", badge: "bg-black/5 text-black/40 border-black/20" },
 };
 
-const NOTE_ROLE_COLORS: Record<string, string> = {
-  teacher: "bg-[#049CD8] text-white",
-  parent: "bg-[#43B047] text-white",
-  doctor: "bg-[#9C27B0] text-white",
-  psychologist: "bg-[#9C27B0] text-white",
+const DOMAIN_ICONS: Record<string, { icon: string; name: string }> = {
+  reading: { icon: "📖", name: "Reading Ability" },
+  math: { icon: "🧮", name: "Mathematical Skill" },
+  writing: { icon: "✏️", name: "Writing Motor Control" },
+  attention: { icon: "🧠", name: "Attention & Executive Function" },
 };
 
 export default function DoctorDashboard() {
   const { user } = useAuth();
   const { t } = useTranslation();
-  const statusLabel = (s: string) => t(`status_${s}`) === `status_${s}` ? s.replace("_", " ") : t(`status_${s}`);
-  const roleLabel = (r: string) => t(`role_${r}`) === `role_${r}` ? r : t(`role_${r}`);
-  const [activeTab, setActiveTab] = useState<"requests" | "cases">("requests");
+
+  const [activeTab, setActiveTab] = useState<"requests" | "cases" | "reports">("requests");
 
   const [requests, setRequests] = useState<DoctorRequest[]>([]);
   const [cases, setCases] = useState<Case[]>([]);
+  const [reports, setReports] = useState<AssessmentReport[]>([]);
+
   const [loadingReq, setLoadingReq] = useState(true);
   const [loadingCases, setLoadingCases] = useState(true);
+  const [loadingReports, setLoadingReports] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  // Expanded case
+  // Dedicated Student Report View State
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+
+  // Search, Filter & Sort State for Patient Reports
+  const [searchQuery, setSearchQuery] = useState("");
+  const [riskFilter, setRiskFilter] = useState<"all" | "high" | "moderate" | "low" | "pending">("all");
+  const [sortBy, setSortBy] = useState<"date" | "name" | "risk">("date");
+
+  // Expanded case notes state
   const [expandedCase, setExpandedCase] = useState<string | null>(null);
   const [caseNotes, setCaseNotes] = useState<Record<string, Note[]>>({});
   const [noteText, setNoteText] = useState<Record<string, string>>({});
   const [noteLoading, setNoteLoading] = useState<Record<string, boolean>>({});
   const [noteSubmitting, setNoteSubmitting] = useState<Record<string, boolean>>({});
+
+  // Doctor fee state
+  const [consultingFee, setConsultingFee] = useState<string>("");
+  const [avgRating, setAvgRating] = useState<number>(0);
+  const [ratingCount, setRatingCount] = useState<number>(0);
+  const [patientReviews, setPatientReviews] = useState<DoctorReview[]>([]);
+  const [feeSaving, setFeeSaving] = useState<boolean>(false);
+  const [feeMsg, setFeeMsg] = useState<string>("");
+  const [feeErr, setFeeErr] = useState<string>("");
 
   const fetchRequests = useCallback(async () => {
     setLoadingReq(true);
@@ -103,22 +145,16 @@ export default function DoctorDashboard() {
     } finally { setLoadingCases(false); }
   }, []);
 
-interface DoctorReview {
-  id: string;
-  rating: number;
-  review?: string;
-  created_at: string;
-  reviewer_name: string;
-}
-
-  // Doctor profile & fee settings state
-  const [consultingFee, setConsultingFee] = useState<string>("");
-  const [avgRating, setAvgRating] = useState<number>(0);
-  const [ratingCount, setRatingCount] = useState<number>(0);
-  const [patientReviews, setPatientReviews] = useState<DoctorReview[]>([]);
-  const [feeSaving, setFeeSaving] = useState<boolean>(false);
-  const [feeMsg, setFeeMsg] = useState<string>("");
-  const [feeErr, setFeeErr] = useState<string>("");
+  const fetchReports = useCallback(async () => {
+    setLoadingReports(true);
+    try {
+      const res = await fetch("/api/assessments");
+      if (res.ok) {
+        const data = await res.json();
+        setReports(Array.isArray(data) ? data : []);
+      }
+    } finally { setLoadingReports(false); }
+  }, []);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -157,7 +193,12 @@ interface DoctorReview {
     }
   };
 
-  useEffect(() => { fetchRequests(); fetchCases(); fetchProfile(); }, [fetchRequests, fetchCases, fetchProfile]);
+  useEffect(() => {
+    fetchRequests();
+    fetchCases();
+    fetchReports();
+    fetchProfile();
+  }, [fetchRequests, fetchCases, fetchReports, fetchProfile]);
 
   const handleRespond = async (id: string, status: "accepted" | "rejected") => {
     setProcessingId(id);
@@ -167,7 +208,11 @@ interface DoctorReview {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      if (res.ok) { fetchRequests(); fetchCases(); }
+      if (res.ok) {
+        fetchRequests();
+        fetchCases();
+        fetchReports();
+      }
     } finally { setProcessingId(null); }
   };
 
@@ -205,6 +250,47 @@ interface DoctorReview {
     } finally { setNoteSubmitting(prev => ({ ...prev, [studentId]: false })); }
   };
 
+  // Filtered & Sorted Reports
+  const filteredReports = useMemo(() => {
+    return reports
+      .filter((r) => {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesQuery = !q || r.child_name.toLowerCase().includes(q);
+
+        const domains = Object.values(r.domain_scores ?? {});
+        let matchesRisk = true;
+        if (riskFilter === "high") {
+          matchesRisk = domains.some((d) => d.risk_level === "high");
+        } else if (riskFilter === "moderate") {
+          matchesRisk = domains.some((d) => d.risk_level === "moderate");
+        } else if (riskFilter === "low") {
+          matchesRisk = domains.length > 0 && domains.every((d) => d.risk_level === "low");
+        } else if (riskFilter === "pending") {
+          matchesRisk = domains.length === 0;
+        }
+
+        return matchesQuery && matchesRisk;
+      })
+      .sort((a, b) => {
+        if (sortBy === "name") {
+          return a.child_name.localeCompare(b.child_name);
+        }
+        if (sortBy === "risk") {
+          const aHigh = Object.values(a.domain_scores ?? {}).filter((d) => d.risk_level === "high").length;
+          const bHigh = Object.values(b.domain_scores ?? {}).filter((d) => d.risk_level === "high").length;
+          return bHigh - aHigh;
+        }
+        // Default: Sort by Date descending
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return dateB - dateA;
+      });
+  }, [reports, searchQuery, riskFilter, sortBy]);
+
+  const selectedReport = useMemo(() => {
+    return reports.find((r) => r.id === selectedReportId) ?? null;
+  }, [reports, selectedReportId]);
+
   const pending = requests.filter(r => r.status === "pending");
 
   return (
@@ -221,7 +307,6 @@ interface DoctorReview {
               {user?.name} · {t("dd_psychologist_dashboard")}
             </p>
           </div>
-          {/* Logout lives in the Sidebar — no duplicate here. */}
         </div>
 
         <div className="flex-1 px-6 sm:px-8 py-6 overflow-y-auto">
@@ -337,7 +422,7 @@ interface DoctorReview {
             {[
               { label: t("dd_pending_requests"), value: pending.length, color: "#FBD000" },
               { label: t("dd_active_cases"), value: cases.length, color: "#43B047" },
-              { label: t("dd_total_requests"), value: requests.length, color: "#5C94FC" },
+              { label: "Patient Reports", value: reports.length, color: "#5C94FC" },
             ].map((s, i) => (
               <motion.div
                 key={s.label}
@@ -353,14 +438,18 @@ interface DoctorReview {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-0 mb-6 border-4 border-black w-fit shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex flex-wrap gap-0 mb-6 border-4 border-black w-fit shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             {[
               { key: "requests", label: t("dd_pending_requests"), count: pending.length },
               { key: "cases", label: t("dd_active_cases"), count: cases.length },
+              { key: "reports", label: "Patient Reports & History", count: reports.length },
             ].map(tab => (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key as any)}
+                onClick={() => {
+                  setActiveTab(tab.key as any);
+                  if (tab.key !== "reports") setSelectedReportId(null);
+                }}
                 className={`px-6 py-3 font-black text-xs uppercase tracking-widest flex items-center gap-2 transition-all ${activeTab === tab.key ? "bg-primary text-white" : "bg-white text-black hover:bg-muted"}`}
               >
                 {tab.label}
@@ -448,134 +537,375 @@ interface DoctorReview {
                 cases.map((c, i) => {
                   const isExpanded = expandedCase === c.student_id;
                   const notes = caseNotes[c.student_id] || [];
+
                   return (
                     <motion.div
                       key={c.student_id}
-                      initial={{ opacity: 0, y: 16 }}
+                      initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.05 }}
                       className="bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
                     >
-                      {/* Case header */}
-                      <div className="h-1.5 w-full bg-primary" />
-                      <div
-                        className="p-5 flex flex-wrap gap-4 items-center cursor-pointer hover:bg-muted/30 transition-colors"
-                        onClick={() => handleExpand(c.student_id)}
-                      >
-                        <div className="w-12 h-12 bg-primary border-2 border-black flex items-center justify-center text-white font-black">
-                          {c.student_name.substring(0, 2).toUpperCase()}
+                      <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-accent border-2 border-black flex items-center justify-center font-black text-black text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                            {c.student_name.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-black text-black text-lg uppercase tracking-tight italic">{c.student_name}</p>
+                            <p className="text-[10px] font-bold text-black/50">
+                              {t("dd_parent")}: {c.parent_name ?? "—"} ({c.parent_email ?? "—"})
+                            </p>
+                            {c.teacher_name && (
+                              <p className="text-[10px] font-bold text-black/40">
+                                {t("dd_teacher")}: {c.teacher_name} ({c.teacher_email})
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-black text-black uppercase tracking-tight">{c.student_name}</p>
-                          <p className="text-[10px] font-bold text-black/50">{c.student_email}</p>
-                        </div>
-                        {c.referral_assessment_type && (
-                          <span className="px-2 py-1 bg-[#5C94FC] text-white border-2 border-black text-[10px] font-black uppercase">
-                            {c.referral_assessment_type}
-                          </span>
-                        )}
-                        {c.assessment_status && (
-                          <span className={`px-2 py-1 border-2 border-black text-[10px] font-black uppercase ${STATUS_COLORS[c.assessment_status] || ""}`}>
-                            {statusLabel(c.assessment_status)}
-                          </span>
-                        )}
-                        {c.report_url && (
-                          <a
-                            href={c.report_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={e => e.stopPropagation()}
-                            className="flex items-center gap-1 px-3 py-2 bg-black text-white text-[10px] font-black uppercase border-2 border-black hover:bg-gray-800 transition-all"
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {c.referral_assessment_type && (
+                            <span className="px-3 py-1 bg-primary text-white border-2 border-black text-[10px] font-black uppercase">
+                              {c.referral_assessment_type}
+                            </span>
+                          )}
+                          {c.report_url && (
+                            <a
+                              href={c.report_url}
+                              download
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#43B047] text-white border-2 border-black font-black text-[10px] uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                            >
+                              <FileDown size={12} /> {t("dd_report")}
+                            </a>
+                          )}
+                          <button
+                            onClick={() => handleExpand(c.student_id)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted border-2 border-black font-black text-[10px] uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                           >
-                            <FileDown size={11} /> {t("dd_report")}
-                          </a>
-                        )}
-                        <div className="ml-auto">
-                          {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                            <MessageSquare size={12} /> Notes & History {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          </button>
                         </div>
                       </div>
 
-                      {/* Expanded details */}
-                      <AnimatePresence>
-                        {isExpanded && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="border-t-4 border-black overflow-hidden"
-                          >
-                            <div className="p-5 space-y-5">
-                              {/* Teacher & Parent info */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {c.teacher_name && (
-                                  <div className="bg-[#049CD8]/10 border-2 border-[#049CD8] p-3">
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-[#049CD8] mb-1">{t("dd_teacher")}</p>
-                                    <p className="font-black text-black">{c.teacher_name}</p>
-                                    <p className="text-[11px] text-black/50">{c.teacher_email}</p>
-                                  </div>
-                                )}
-                                {c.parent_name && (
-                                  <div className="bg-[#43B047]/10 border-2 border-[#43B047] p-3">
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-[#43B047] mb-1">{t("dd_parent_guardian")}</p>
-                                    <p className="font-black text-black">{c.parent_name}</p>
-                                    <p className="text-[11px] text-black/50">{c.parent_email}</p>
-                                  </div>
-                                )}
-                              </div>
+                      {/* Expanded Notes Section */}
+                      {isExpanded && (
+                        <div className="border-t-4 border-black p-5 bg-muted/30">
+                          <p className="text-xs font-black uppercase tracking-widest text-black/60 mb-3 flex items-center gap-2">
+                            <MessageSquare size={14} /> Clinical Notes History
+                          </p>
 
-                              {/* Notes */}
-                              <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-black/60 mb-3">{t("dd_all_notes")}</p>
-                                {noteLoading[c.student_id] ? (
-                                  <div className="flex items-center justify-center py-8"><RefreshCw size={20} className="animate-spin text-primary" /></div>
-                                ) : notes.length === 0 ? (
-                                  <p className="text-sm font-black text-black/30 uppercase italic py-4 text-center">{t("dd_no_notes_yet")}</p>
-                                ) : (
-                                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                                    {notes.map(note => (
-                                      <div key={note.id} className="border-2 border-black p-3 bg-white">
-                                        <div className="flex items-center gap-2 mb-1.5">
-                                          <span className={`${NOTE_ROLE_COLORS[note.author_role] || "bg-gray-400 text-white"} px-2 py-0.5 text-[9px] font-black uppercase border border-black`}>
-                                            {roleLabel(note.author_role)}
-                                          </span>
-                                          <span className="text-[10px] font-bold text-black/50">{note.author_name}</span>
-                                          <span className="ml-auto text-[9px] text-black/30">
-                                            {new Date(note.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                                          </span>
-                                        </div>
-                                        <p className="text-sm text-black/80">{note.content}</p>
-                                      </div>
-                                    ))}
+                          <div className="space-y-2 mb-4 max-h-60 overflow-y-auto pr-1">
+                            {noteLoading[c.student_id] ? (
+                              <RefreshCw size={16} className="animate-spin text-primary my-4" />
+                            ) : notes.length === 0 ? (
+                              <p className="text-xs text-black/40 italic font-bold">No clinical notes recorded yet.</p>
+                            ) : (
+                              notes.map((n) => (
+                                <div key={n.id} className="p-3 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                  <div className="flex justify-between items-center mb-1">
+                                    <span className="font-black text-xs text-black">{n.author_name} ({n.author_role})</span>
+                                    <span className="text-[9px] font-bold text-black/40">{new Date(n.created_at).toLocaleString()}</span>
                                   </div>
-                                )}
-                              </div>
+                                  <p className="text-xs text-black/80">{n.content}</p>
+                                </div>
+                              ))
+                            )}
+                          </div>
 
-                              {/* Add consultation note */}
-                              <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-black/60 mb-2">{t("dd_add_consultation_note")}</p>
-                                <textarea
-                                  value={noteText[c.student_id] || ""}
-                                  onChange={e => setNoteText(prev => ({ ...prev, [c.student_id]: e.target.value }))}
-                                  placeholder={t("dd_consultation_placeholder")}
-                                  rows={3}
-                                  className="w-full px-4 py-3 border-4 border-black bg-muted focus:bg-white focus:outline-none text-sm resize-none"
-                                />
-                                <button
-                                  onClick={() => handlePostNote(c.student_id)}
-                                  disabled={!noteText[c.student_id]?.trim() || noteSubmitting[c.student_id]}
-                                  className="mt-2 flex items-center gap-2 px-5 py-3 bg-[#9C27B0] text-white border-4 border-black font-black uppercase tracking-widest text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-40"
-                                >
-                                  {noteSubmitting[c.student_id] ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
-                                  {t("dd_post_consultation_note")}
-                                </button>
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={noteText[c.student_id] || ""}
+                              onChange={(e) => setNoteText((prev) => ({ ...prev, [c.student_id]: e.target.value }))}
+                              placeholder="Write a clinical note..."
+                              className="flex-1 px-4 py-2 bg-white border-2 border-black font-bold text-xs uppercase focus:outline-none"
+                            />
+                            <button
+                              onClick={() => handlePostNote(c.student_id)}
+                              disabled={noteSubmitting[c.student_id]}
+                              className="px-4 py-2 bg-primary text-white border-2 border-black font-black text-xs uppercase flex items-center gap-1"
+                            >
+                              <Send size={12} /> Post
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </motion.div>
                   );
                 })
+              )}
+            </div>
+          )}
+
+          {/* PATIENT REPORTS TAB */}
+          {activeTab === "reports" && (
+            <div>
+              {/* DEDICATED STUDENT REPORT DETAIL VIEW */}
+              {selectedReport ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-6"
+                >
+                  {/* Back Navigation Bar */}
+                  <div className="flex items-center justify-between bg-white border-4 border-black p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    <button
+                      onClick={() => setSelectedReportId(null)}
+                      className="flex items-center gap-2 px-4 py-2 bg-black text-white font-black text-xs uppercase tracking-widest border-2 border-black hover:bg-gray-800 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    >
+                      <ArrowLeft size={16} /> Back to Patient List
+                    </button>
+                    <span className="text-xs font-black uppercase text-black/50 tracking-widest hidden sm:inline">
+                      Dedicated Patient Assessment View
+                    </span>
+                  </div>
+
+                  {/* Patient Profile Header Card */}
+                  <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-primary text-white border-3 border-black flex items-center justify-center font-black text-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                          {selectedReport.child_name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <h2 className="text-2xl font-black text-black uppercase italic tracking-tight">{selectedReport.child_name}</h2>
+                            <span className="px-3 py-1 bg-accent border-2 border-black text-black text-xs font-black uppercase">
+                              Age {selectedReport.age}
+                            </span>
+                            <span className="px-3 py-1 bg-muted border-2 border-black text-black text-xs font-black uppercase">
+                              {selectedReport.gender}
+                            </span>
+                          </div>
+                          <p className="text-xs font-black text-black/50 uppercase tracking-widest mt-1">
+                            School Grade: {selectedReport.school_grade ?? "—"} · Language: {selectedReport.language ?? "English"}
+                            {selectedReport.created_at && ` · Assessment Date: ${new Date(selectedReport.created_at).toLocaleDateString("en-GB")}`}
+                          </p>
+                        </div>
+                      </div>
+
+                      {selectedReport.report_url && (
+                        <a
+                          href={selectedReport.report_url}
+                          download
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-6 py-3 bg-[#43B047] text-white border-4 border-black font-black text-xs uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all self-start sm:self-auto"
+                        >
+                          <FileDown size={16} /> Download Full PDF Report
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Screening Domain Performance & Risk Levels */}
+                  <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                    <h3 className="text-lg font-black uppercase italic text-black mb-4 flex items-center gap-2">
+                      <Activity size={20} className="text-primary" /> Screening Domain Performance Breakdown
+                    </h3>
+
+                    {selectedReport.domain_scores && Object.keys(selectedReport.domain_scores).length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {Object.entries(selectedReport.domain_scores).map(([domain, ds]) => {
+                          const riskKey = ds.risk_level ?? "unknown";
+                          const cfg = RISK_CONFIG[riskKey] ?? RISK_CONFIG.unknown;
+                          const pct = Math.round((ds.composite_score ?? 0) * 100);
+                          const domMeta = DOMAIN_ICONS[domain] ?? { icon: "🎯", name: domain.toUpperCase() };
+
+                          return (
+                            <div key={domain} className="border-4 border-black bg-muted/20 overflow-hidden shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                              <div className={`px-4 py-2 flex items-center justify-between border-b-2 border-black ${cfg.color}`}>
+                                <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                                  <span>{domMeta.icon}</span> {domain}
+                                </span>
+                                <span className="text-[10px] font-black uppercase px-2 py-0.5 border border-black bg-black/20 text-white">
+                                  {cfg.label}
+                                </span>
+                              </div>
+                              <div className="p-4 text-center">
+                                <p className="text-4xl font-black text-black">{pct}%</p>
+                                <p className="text-[10px] font-black uppercase text-black/40 mt-1">Composite Score</p>
+
+                                {/* Visual Progress Bar */}
+                                <div className="w-full bg-black/10 h-3 border-2 border-black mt-3 overflow-hidden">
+                                  <div
+                                    className={`h-full ${pct >= 75 ? "bg-[#43B047]" : pct >= 50 ? "bg-[#FBD000]" : "bg-[#E52521]"}`}
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-6 bg-muted border-2 border-black text-center font-black uppercase text-xs text-black/40">
+                        Screening AI engine processing in progress or pending completion.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Detailed Clinical Assessment Narrative / Flags */}
+                  {selectedReport.flags_for_assessment && selectedReport.flags_for_assessment.length > 0 && (
+                    <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                      <h3 className="text-lg font-black uppercase italic text-black mb-3 flex items-center gap-2">
+                        <AlertTriangle size={20} className="text-[#E52521]" /> Key Flags for Formal Assessment
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedReport.flags_for_assessment.map((flag, idx) => (
+                          <span key={idx} className="px-3 py-1.5 bg-[#E52521] text-white border-2 border-black font-black text-xs uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                            {flag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              ) : (
+                /* PATIENT GRID VIEW WITH SEARCH, FILTER & SORT */
+                <div className="space-y-6">
+                  {/* Search, Filter & Sort Controls */}
+                  <div className="bg-white border-4 border-black p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col md:flex-row gap-4 justify-between items-center">
+                    {/* Search input */}
+                    <div className="relative w-full md:w-80">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-black/40" size={16} />
+                      <input
+                        type="text"
+                        placeholder="Search patient name..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 border-3 border-black bg-muted font-black text-xs uppercase focus:bg-white focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Filter & Sort Controls */}
+                    <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+                      <div className="flex items-center gap-2">
+                        <SlidersHorizontal size={14} className="text-black/50" />
+                        <span className="text-[10px] font-black uppercase text-black/60">Risk:</span>
+                        <select
+                          value={riskFilter}
+                          onChange={(e) => setRiskFilter(e.target.value as any)}
+                          className="px-3 py-2 border-3 border-black bg-white font-black text-xs uppercase focus:outline-none cursor-pointer"
+                        >
+                          <option value="all">All Risk Levels</option>
+                          <option value="high">Follow Up (High Risk)</option>
+                          <option value="moderate">Monitor (Moderate Risk)</option>
+                          <option value="low">Low Risk</option>
+                          <option value="pending">Pending Analysis</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <ArrowUpDown size={14} className="text-black/50" />
+                        <span className="text-[10px] font-black uppercase text-black/60">Sort:</span>
+                        <select
+                          value={sortBy}
+                          onChange={(e) => setSortBy(e.target.value as any)}
+                          className="px-3 py-2 border-3 border-black bg-white font-black text-xs uppercase focus:outline-none cursor-pointer"
+                        >
+                          <option value="date">Most Recent Assessment</option>
+                          <option value="name">Patient Name (A-Z)</option>
+                          <option value="risk">Highest Risk First</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Patient Cards Grid */}
+                  {loadingReports ? (
+                    <div className="flex items-center justify-center py-20"><RefreshCw className="animate-spin text-primary" size={32} /></div>
+                  ) : filteredReports.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 border-4 border-dashed border-black/20 text-center p-6">
+                      <FileText size={48} className="text-black/20 mb-4" />
+                      <p className="text-xl font-black uppercase italic text-black/30">No Patient Reports Found</p>
+                      <p className="text-xs font-black uppercase text-black/30 mt-1 max-w-md">
+                        {searchQuery || riskFilter !== "all"
+                          ? "Try clearing your search query or changing the risk filter."
+                          : "Reports for accepted patients will appear here automatically."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {filteredReports.map((rep, i) => {
+                        const domains = Object.entries(rep.domain_scores ?? {});
+                        const highRisk = domains.filter(([, d]) => d.risk_level === "high").length;
+                        const modRisk = domains.filter(([, d]) => d.risk_level === "moderate").length;
+
+                        return (
+                          <motion.div
+                            key={rep.id || i}
+                            initial={{ opacity: 0, y: 16 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.04 }}
+                            onClick={() => setSelectedReportId(rep.id)}
+                            className="bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all cursor-pointer flex flex-col justify-between overflow-hidden"
+                          >
+                            <div className="p-5">
+                              {/* Card Header */}
+                              <div className="flex items-start justify-between gap-3 mb-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-12 h-12 bg-primary text-white border-2 border-black flex items-center justify-center font-black text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                    {rep.child_name.substring(0, 2).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <h3 className="font-black text-black text-lg uppercase tracking-tight italic">{rep.child_name}</h3>
+                                    <p className="text-[10px] font-black text-black/50 uppercase tracking-widest">
+                                      Age {rep.age} · {rep.gender} · {rep.school_grade ?? "—"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Risk Summary Badges */}
+                              <div className="space-y-2 mb-4">
+                                <p className="text-[9px] font-black uppercase text-black/40 tracking-widest">Assessment Risk Profile:</p>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {highRisk > 0 && (
+                                    <span className="bg-[#E52521] text-white text-[10px] font-black uppercase px-2.5 py-1 border border-black">
+                                      {highRisk} Follow Up
+                                    </span>
+                                  )}
+                                  {modRisk > 0 && (
+                                    <span className="bg-[#FBD000] text-black text-[10px] font-black uppercase px-2.5 py-1 border border-black">
+                                      {modRisk} Monitor
+                                    </span>
+                                  )}
+                                  {domains.length > 0 && highRisk === 0 && modRisk === 0 && (
+                                    <span className="bg-[#43B047] text-white text-[10px] font-black uppercase px-2.5 py-1 border border-black">
+                                      All Low Risk
+                                    </span>
+                                  )}
+                                  {domains.length === 0 && (
+                                    <span className="bg-black/10 text-black/50 text-[10px] font-black uppercase px-2.5 py-1 border border-black">
+                                      Pending Screening
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {rep.created_at && (
+                                <p className="text-[10px] font-black text-black/40 uppercase">
+                                  📅 {new Date(rep.created_at).toLocaleDateString()}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Card Footer Button */}
+                            <div className="bg-muted border-t-3 border-black p-3 text-center">
+                              <span className="font-black text-xs uppercase tracking-widest text-primary flex items-center justify-center gap-1">
+                                View Dedicated Report →
+                              </span>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
