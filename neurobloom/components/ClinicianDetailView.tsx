@@ -102,7 +102,17 @@ export function ClinicianDetailView({
   };
 
   const handlePrint = () => {
-    window.print();
+    const originalState = { ...expandedDomains };
+    const allExpanded: Record<string, boolean> = {};
+    domains.forEach(([dKey]) => {
+      allExpanded[dKey] = true;
+    });
+    setExpandedDomains(allExpanded);
+
+    setTimeout(() => {
+      window.print();
+      setExpandedDomains(originalState);
+    }, 150);
   };
 
   const profile = report.child_profile ?? {
@@ -118,7 +128,30 @@ export function ClinicianDetailView({
   const rawTasks = report.raw_task_responses ?? [];
 
   return (
-    <div className="space-y-6 print:space-y-4 print:text-black">
+    <div className="space-y-6 print:space-y-4 print:text-black font-sans">
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4;
+            margin: 12mm;
+          }
+          body {
+            background: white !important;
+            color: black !important;
+          }
+          .print\:hidden {
+            display: none !important;
+          }
+          .collapsible-detail {
+            display: block !important;
+          }
+          .domain-card {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            margin-bottom: 12px !important;
+          }
+        }
+      `}</style>
       {/* Printable Header & Action Strip */}
       <div className="flex items-center justify-between bg-white border-4 border-black p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] print:border-b-2 print:shadow-none">
         <div>
@@ -216,7 +249,7 @@ export function ClinicianDetailView({
           return (
             <div
               key={domainKey}
-              className="bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden print:shadow-none print:break-inside-avoid"
+              className="domain-card bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden print:shadow-none print:break-inside-avoid"
             >
               {/* Header (Summary Bar) */}
               <div
@@ -244,8 +277,8 @@ export function ClinicianDetailView({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className={`flex items-center gap-1.5 px-3 py-1 text-xs font-black uppercase border border-black ${cfg.badgeBg}`}>
-                    {cfg.icon} {cfg.label}
+                  <span className={`flex items-center gap-1.5 px-3 py-1 text-xs font-black uppercase border border-black ${isInsufficient ? "bg-black/10 text-black/60" : cfg.badgeBg}`}>
+                    {isInsufficient ? <Clock size={14} /> : cfg.icon} {isInsufficient ? "Incomplete" : cfg.label}
                   </span>
                   {!isInsufficient && (
                     <button type="button" className="p-1 text-black print:hidden">
@@ -264,7 +297,7 @@ export function ClinicianDetailView({
 
               {/* Expandable Clinician Detail Section (Always visible in Print mode) */}
               {(!isInsufficient && (isExpanded || true)) && (
-                <div className={`${isExpanded ? "block" : "hidden print:block"} p-6 bg-white space-y-6 border-t-2 border-black/10`}>
+                <div className={`collapsible-detail ${isExpanded ? "block" : "hidden print:block"} p-6 bg-white space-y-6 border-t-2 border-black/10`}>
                   
                   {/* a) Subscores Table */}
                   {ds.subscores && Object.keys(ds.subscores).length > 0 && (

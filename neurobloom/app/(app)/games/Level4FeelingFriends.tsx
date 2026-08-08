@@ -61,17 +61,18 @@ export function Level4FeelingFriends({ onComplete, onProgress }: Level4Props) {
 
     const isCorrect = faceIndex === currentEmotion.correctIndex;
     const score = isCorrect ? 1 : 0;
-    const timeTaken = Math.floor((Date.now() - questionStartTime.current) / 1000);
+    const elapsedMs = Math.max(500, Date.now() - questionStartTime.current);
+    const timeTakenSec = Math.max(1, Math.round(elapsedMs / 1000));
     const sessionId = localStorage.getItem("sessionId");
 
     setSelectedFace(faceIndex);
     
 
     const payloadMap: any = {
-      0: { test4_q1: score, test4_q1_time: timeTaken },
-      1: { test4_q2: score, test4_q2_time: timeTaken },
-      2: { test4_q3: score, test4_q3_time: timeTaken },
-      3: { test4_q4: score, test4_q4_time: timeTaken },
+      0: { test4_q1: score, test4_q1_time: timeTakenSec },
+      1: { test4_q2: score, test4_q2_time: timeTakenSec },
+      2: { test4_q3: score, test4_q3_time: timeTakenSec },
+      3: { test4_q4: score, test4_q4_time: timeTakenSec },
     };
 
     try {
@@ -87,7 +88,7 @@ export function Level4FeelingFriends({ onComplete, onProgress }: Level4Props) {
             construct: "emotion_recognition",
             task_type: "feeling_friends",
             response_data: { emotion: currentEmotion.emotion, face_index: faceIndex, correct: isCorrect, score },
-            reaction_time_ms: timeTaken * 1000
+            reaction_time_ms: elapsedMs
           }
         })
       });

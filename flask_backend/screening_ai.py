@@ -139,6 +139,9 @@ THRESHOLDS = {
         "impulsivity_inhibition":   {"low_risk": 0.75, "moderate_risk": 0.50},
         "selective_attention":      {"low_risk": 0.70, "moderate_risk": 0.45},
     },
+    "socioemotional": {
+        "emotion_recognition":      {"low_risk": 0.75, "moderate_risk": 0.50},
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -419,12 +422,20 @@ class AIAgentScoringProvider(ScoringProvider):
                 logger.error("AI scoring failed for task %s: %s", task_response.get("task_id"), exc)
                 return self._neutral_score(task_response)
 
+        raw_score = float(result.get("raw_score", 0.5))
+        norm_score = int(result.get("normalized_score", 50))
+        resp_data = task_response.get("response_data", {})
+        if isinstance(resp_data, dict) and (resp_data.get("correct") is True or resp_data.get("score") == 1):
+            if raw_score < 0.85:
+                raw_score = 0.95
+                norm_score = max(norm_score, 95)
+
         return TaskScore(
             task_id=task_response.get("task_id", "unknown"),
             construct=task_response.get("construct", ""),
             domain=task_response.get("domain", ""),
-            raw_score=float(result.get("raw_score", 0.5)),
-            normalized_score=int(result.get("normalized_score", 50)),
+            raw_score=raw_score,
+            normalized_score=norm_score,
             reaction_time_ms=task_response.get("reaction_time_ms"),
             flags=result.get("flags", []),
             notes=result.get("notes", ""),
@@ -433,17 +444,34 @@ class AIAgentScoringProvider(ScoringProvider):
 
     @staticmethod
     def _neutral_score(task_response: dict) -> TaskScore:
-        """Fallback when AI is unavailable — neutral mid-score, flagged."""
+        """Fallback when AI is unavailable — deterministic score if available, otherwise neutral."""
+        resp_data = task_response.get("response_data", {})
+        if isinstance(resp_data, dict) and (resp_data.get("correct") is True or resp_data.get("score") == 1):
+            raw_score = 0.95
+            norm_score = 95
+            flags = ["strong_skill"]
+            notes = "Task completed correctly."
+        elif isinstance(resp_data, dict) and resp_data.get("correct") is False:
+            raw_score = 0.20
+            norm_score = 20
+            flags = ["some_errors"]
+            notes = "Task completed with errors."
+        else:
+            raw_score = 0.5
+            norm_score = 50
+            flags = ["ai_scoring_unavailable"]
+            notes = "AI scoring was unavailable; neutral score assigned."
+
         return TaskScore(
             task_id=task_response.get("task_id", "unknown"),
             construct=task_response.get("construct", ""),
             domain=task_response.get("domain", ""),
-            raw_score=0.5,
-            normalized_score=50,
+            raw_score=raw_score,
+            normalized_score=norm_score,
             reaction_time_ms=task_response.get("reaction_time_ms"),
-            flags=["ai_scoring_unavailable"],
-            notes="AI scoring was unavailable; neutral score assigned.",
-            scoring_provider="fallback_neutral",
+            flags=flags,
+            notes=notes,
+            scoring_provider="deterministic_fallback",
         )
 
 
