@@ -171,4 +171,50 @@ CREATE TRIGGER notify_on_completion
   WHEN (NEW.status = 'completed' AND OLD.status IS DISTINCT FROM 'completed')
   EXECUTE FUNCTION notify_neurobloom();
 
+-- ─── Screening responses (per-task training data) ────────────────────────────
+CREATE TABLE IF NOT EXISTS screening_responses (
+  id                   SERIAL PRIMARY KEY,
+  session_id           TEXT,
+  task_id              TEXT NOT NULL,
+  domain               TEXT NOT NULL,
+  construct            TEXT NOT NULL,
+  task_type            TEXT,
+  questionnaire_group  TEXT,
+  age_years            INT,
+  school_grade         TEXT,
+  language             TEXT,
+  response_json        JSONB,
+  reaction_time_ms     INT,
+  raw_score            NUMERIC(5,4),
+  normalized_score     INT,
+  flags                TEXT[],
+  ai_scoring_provider  TEXT DEFAULT 'ai_agent_interim',
+  rubric_version       TEXT DEFAULT 'prototype-heuristic-v1',
+  evidence_status      TEXT DEFAULT 'prototype_heuristic',
+  created_at           TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_screening_responses_session
+  ON screening_responses(session_id);
+
+CREATE INDEX IF NOT EXISTS idx_screening_responses_domain
+  ON screening_responses(domain, construct);
+
+-- ─── Screening reports (final aggregated session report) ─────────────────────
+CREATE TABLE IF NOT EXISTS screening_reports (
+  id                   SERIAL PRIMARY KEY,
+  session_id           TEXT UNIQUE,
+  questionnaire_group  TEXT,
+  domain_scores        JSONB,
+  narrative            JSONB,
+  flags_for_assessment TEXT[],
+  evidence_status      TEXT DEFAULT 'prototype_heuristic',
+  rubric_version       TEXT DEFAULT 'prototype-heuristic-v1',
+  scoring_provider     TEXT DEFAULT 'ai_agent_interim',
+  created_at           TIMESTAMP DEFAULT NOW(),
+  updated_at           TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_screening_reports_session
+  ON screening_reports(session_id);
 
