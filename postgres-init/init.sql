@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL,
+  consulting_fee NUMERIC(10,2) DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT users_role_check CHECK (
     role IN ('parent', 'educator', 'researcher', 'teacher', 'doctor', 'psychologist')
@@ -49,6 +50,8 @@ CREATE TABLE IF NOT EXISTS child_assessment_features (
   test6_q4_time BIGINT, test6_q4_score BIGINT,
 
   status TEXT DEFAULT 'in_progress',
+  school_grade TEXT,
+  language TEXT DEFAULT 'english',
   report_url TEXT,
   video_link TEXT,
   detected_disabilities TEXT,
@@ -144,7 +147,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- ─── Doctor Ratings ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS doctor_ratings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  doctor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  review TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT unique_user_doctor_rating UNIQUE(user_id, doctor_id)
+);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS consulting_fee NUMERIC(10,2) DEFAULT 0;
 ALTER TABLE child_assessment_features ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'in_progress';
+ALTER TABLE child_assessment_features ADD COLUMN IF NOT EXISTS school_grade TEXT;
+ALTER TABLE child_assessment_features ADD COLUMN IF NOT EXISTS language TEXT DEFAULT 'english';
 DROP TRIGGER IF EXISTS new_child_trigger ON child_assessment_features;
 DROP TRIGGER IF EXISTS notify_on_completion ON child_assessment_features;
 CREATE TRIGGER notify_on_completion
@@ -152,4 +170,51 @@ CREATE TRIGGER notify_on_completion
   FOR EACH ROW
   WHEN (NEW.status = 'completed' AND OLD.status IS DISTINCT FROM 'completed')
   EXECUTE FUNCTION notify_neurobloom();
+
+-- ─── Screening responses (per-task training data) ────────────────────────────
+CREATE TABLE IF NOT EXISTS screening_responses (
+  id                   SERIAL PRIMARY KEY,
+  session_id           TEXT,
+  task_id              TEXT NOT NULL,
+  domain               TEXT NOT NULL,
+  construct            TEXT NOT NULL,
+  task_type            TEXT,
+  questionnaire_group  TEXT,
+  age_years            INT,
+  school_grade         TEXT,
+  language             TEXT,
+  response_json        JSONB,
+  reaction_time_ms     INT,
+  raw_score            NUMERIC(5,4),
+  normalized_score     INT,
+  flags                TEXT[],
+  ai_scoring_provider  TEXT DEFAULT 'ai_agent_interim',
+  rubric_version       TEXT DEFAULT 'prototype-heuristic-v1',
+  evidence_status      TEXT DEFAULT 'prototype_heuristic',
+  created_at           TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_screening_responses_session
+  ON screening_responses(session_id);
+
+CREATE INDEX IF NOT EXISTS idx_screening_responses_domain
+  ON screening_responses(domain, construct);
+
+-- ─── Screening reports (final aggregated session report) ─────────────────────
+CREATE TABLE IF NOT EXISTS screening_reports (
+  id                   SERIAL PRIMARY KEY,
+  session_id           TEXT UNIQUE,
+  questionnaire_group  TEXT,
+  domain_scores        JSONB,
+  narrative            JSONB,
+  flags_for_assessment TEXT[],
+  evidence_status      TEXT DEFAULT 'prototype_heuristic',
+  rubric_version       TEXT DEFAULT 'prototype-heuristic-v1',
+  scoring_provider     TEXT DEFAULT 'ai_agent_interim',
+  created_at           TIMESTAMP DEFAULT NOW(),
+  updated_at           TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_screening_reports_session
+  ON screening_reports(session_id);
 
