@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS child_assessment_features (
   test6_q4_time BIGINT, test6_q4_score BIGINT,
 
   status TEXT DEFAULT 'in_progress',
+  school_grade TEXT,
+  language TEXT DEFAULT 'english',
   report_url TEXT,
   video_link TEXT,
   detected_disabilities TEXT,
@@ -145,6 +147,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 ALTER TABLE child_assessment_features ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'in_progress';
+ALTER TABLE child_assessment_features ADD COLUMN IF NOT EXISTS school_grade TEXT;
+ALTER TABLE child_assessment_features ADD COLUMN IF NOT EXISTS language TEXT DEFAULT 'english';
 DROP TRIGGER IF EXISTS new_child_trigger ON child_assessment_features;
 DROP TRIGGER IF EXISTS notify_on_completion ON child_assessment_features;
 CREATE TRIGGER notify_on_completion
