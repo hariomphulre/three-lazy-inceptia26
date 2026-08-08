@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL,
+  consulting_fee NUMERIC(10,2) DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT users_role_check CHECK (
     role IN ('parent', 'educator', 'researcher', 'teacher', 'doctor', 'psychologist')
@@ -144,6 +145,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- ─── Doctor Ratings ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS doctor_ratings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  doctor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  review TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT unique_user_doctor_rating UNIQUE(user_id, doctor_id)
+);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS consulting_fee NUMERIC(10,2) DEFAULT 0;
 ALTER TABLE child_assessment_features ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'in_progress';
 DROP TRIGGER IF EXISTS new_child_trigger ON child_assessment_features;
 DROP TRIGGER IF EXISTS notify_on_completion ON child_assessment_features;
@@ -152,4 +166,5 @@ CREATE TRIGGER notify_on_completion
   FOR EACH ROW
   WHEN (NEW.status = 'completed' AND OLD.status IS DISTINCT FROM 'completed')
   EXECUTE FUNCTION notify_neurobloom();
+
 

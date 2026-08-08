@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, Stethoscope, MessageSquare, Send,
   FileDown, RefreshCw, Plus, X, Check,
-  AlertCircle, Heart, Play
+  AlertCircle, Heart, Play, Star, Coins, ArrowUpDown, SlidersHorizontal
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/context/AuthContext";
@@ -39,6 +39,7 @@ interface Note {
 
 interface DoctorRequest {
   id: string;
+  doctor_id?: string;
   status: string;
   doctor_name: string;
   doctor_email: string;
@@ -50,6 +51,11 @@ interface Doctor {
   id: string;
   name: string;
   email: string;
+  role?: string;
+  consulting_fee?: number;
+  avg_rating?: number;
+  rating_count?: number;
+  user_rating?: number;
 }
 
 // Deterministic accent colours for the specialist cards (API only returns id/name/email)
@@ -104,6 +110,101 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
   const [selectedDoctorId, setSelectedDoctorId] = useState("");
   const [requestSubmitting, setRequestSubmitting] = useState(false);
   const [requestError, setRequestError] = useState("");
+
+  const [sortBy, setSortBy] = useState<"price_asc" | "price_desc" | "rating_desc" | "rating_asc" | "name">("price_asc");
+
+  const sortedDoctors = useMemo(() => {
+    return [...doctors].sort((a, b) => {
+      const feeA = Number(a.consulting_fee) || 0;
+      const feeB = Number(b.consulting_fee) || 0;
+      const ratingA = Number(a.avg_rating) || 0;
+      const ratingB = Number(b.avg_rating) || 0;
+
+      if (sortBy === "price_asc") return feeA - feeB;
+      if (sortBy === "price_desc") return feeB - feeA;
+      if (sortBy === "rating_desc") return ratingB - ratingA;
+      if (sortBy === "rating_asc") return ratingA - ratingB;
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      return 0;
+    });
+  }, [doctors, sortBy]);
+
+  // Doctor rating & review modal state
+  const [ratingDoctorId, setRatingDoctorId] = useState<string | null>(null);
+  const [selectedStars, setSelectedStars] = useState<number>(5);
+  const [reviewComment, setReviewComment] = useState<string>("");
+  const [ratingSubmitting, setRatingSubmitting] = useState<boolean>(false);
+  const [viewingReviewsDoctorId, setViewingReviewsDoctorId] = useState<string | null>(null);
+  const [doctorReviewsList, setDoctorReviewsList] = useState<any[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState<boolean>(false);
+
+  const handleOpenRatingModal = (doc: Doctor, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setRatingDoctorId(doc.id);
+    setSelectedStars(doc.user_rating || 5);
+    setReviewComment("");
+  };
+
+  const handleSaveRatingAndReview = async () => {
+    if (!ratingDoctorId || !selectedStars) return;
+    setRatingSubmitting(true);
+    try {
+      const res = await fetch("/api/doctor/rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doctorId: ratingDoctorId, rating: selectedStars, review: reviewComment.trim() || undefined }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDoctors((prev) =>
+          prev.map((d) =>
+            d.id === ratingDoctorId
+              ? { ...d, user_rating: data.user_rating, avg_rating: data.avg_rating, rating_count: data.rating_count }
+              : d
+          )
+        );
+        setRatingDoctorId(null);
+      }
+    } catch {} finally {
+      setRatingSubmitting(false);
+    }
+  };
+
+  const handleFetchDoctorReviews = async (doctorId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setViewingReviewsDoctorId(doctorId);
+    setLoadingReviews(true);
+    try {
+      const res = await fetch(`/api/doctor/reviews?doctorId=${doctorId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDoctorReviewsList(data.reviews || []);
+      }
+    } catch {} finally {
+      setLoadingReviews(false);
+    }
+  };
+
+  const handleRateDoctor = async (e: React.MouseEvent, doctorId: string, rating: number) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch("/api/doctor/rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doctorId, rating }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDoctors((prev) =>
+          prev.map((d) =>
+            d.id === doctorId
+              ? { ...d, user_rating: data.user_rating, avg_rating: data.avg_rating, rating_count: data.rating_count }
+              : d
+          )
+        );
+      }
+    } catch {}
+  };
 
   // The currently-selected child (derived from the fetched list).
   const student = students.find(s => s.id === selectedId) ?? null;
@@ -217,17 +318,34 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
         <p className="text-[11px] font-black uppercase text-black/20 italic">No requests sent</p>
       ) : (
         <div className="space-y-2">
-          {doctorRequests.map(req => (
-            <div key={req.id} className="flex items-center justify-between border-2 border-black p-2 bg-muted">
-              <div>
-                <p className="text-[11px] font-black text-black uppercase">{req.doctor_name}</p>
-                <p className="text-[9px] text-black/40 font-bold">{req.doctor_email}</p>
+          {doctorRequests.map(req => {
+            const matchedDoctor = doctors.find(d => d.email.toLowerCase() === req.doctor_email.toLowerCase() || d.name === req.doctor_name);
+            const targetDocId = req.doctor_id || matchedDoctor?.id;
+            const isSelf = user?.userId && targetDocId && user.userId === targetDocId;
+
+            return (
+              <div key={req.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-2 border-black p-2.5 bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <div>
+                  <p className="text-[12px] font-black text-black uppercase">{req.doctor_name}</p>
+                  <p className="text-[9px] text-black/40 font-bold">{req.doctor_email}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 border border-black text-[9px] font-black uppercase ${STATUS_CLS[req.status] || ""}`}>
+                    {statusLabel(req.status)}
+                  </span>
+                  {!isSelf && targetDocId && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenRatingModal(matchedDoctor || { id: targetDocId, name: req.doctor_name, email: req.doctor_email })}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-accent text-black border border-black text-[9px] font-black uppercase shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] hover:bg-black hover:text-white transition-colors"
+                    >
+                      <Star size={11} className="fill-[#FBD000] text-black stroke-[1]" /> Rate &amp; Review
+                    </button>
+                  )}
+                </div>
               </div>
-              <span className={`px-2 py-0.5 border border-black text-[9px] font-black uppercase ${STATUS_CLS[req.status] || ""}`}>
-                {statusLabel(req.status)}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -540,35 +658,135 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                   </div>
                   <button onClick={() => setShowRequestModal(false)} className="text-white"><X size={20} /></button>
                 </div>
-                <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-black/60">Select a Specialist</p>
-                  {doctors.length === 0 ? (
+                <div className="p-6 space-y-4">
+                  {/* Sorting Header */}
+                  <div className="flex items-center justify-between gap-2 pb-2 border-b-2 border-black/10">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-black/60">Select a Specialist</p>
+                    <div className="flex items-center gap-1.5 bg-muted border-2 border-black px-2.5 py-1">
+                      <ArrowUpDown size={12} className="text-black/60" />
+                      <span className="text-[10px] font-black uppercase text-black/50">Sort:</span>
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value as any)}
+                        className="bg-transparent text-[11px] font-black uppercase focus:outline-none cursor-pointer"
+                      >
+                        <option value="price_asc">Price: Low to High</option>
+                        <option value="price_desc">Price: High to Low</option>
+                        <option value="rating_desc">Rating: High to Low</option>
+                        <option value="rating_asc">Rating: Low to High</option>
+                        <option value="name">Name: A - Z</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {doctorsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <RefreshCw className="animate-spin text-[#9C27B0]" size={22} />
+                    </div>
+                  ) : sortedDoctors.length === 0 ? (
                     <p className="text-sm font-black uppercase text-black/30 italic py-4 text-center">
                       No doctors available yet
                     </p>
                   ) : (
-                    doctors.map((doc, i) => {
-                      const color = DOCTOR_COLORS[i % DOCTOR_COLORS.length];
-                      const selected = selectedDoctorId === doc.id;
-                      return (
-                        <button
-                          key={doc.id}
-                          onClick={() => setSelectedDoctorId(doc.id)}
-                          className={`w-full flex items-center gap-4 p-3 border-4 border-black text-left transition-all ${selected ? "shadow-none translate-x-1 translate-y-1" : "shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:translate-x-0.5 hover:translate-y-0.5"}`}
-                          style={{ backgroundColor: selected ? color : "white" }}
-                        >
-                          <div className="w-10 h-10 border-2 border-black flex items-center justify-center text-white font-black flex-shrink-0" style={{ backgroundColor: color }}>
-                            {doc.name.substring(0, 2).toUpperCase()}
+                    <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+                      {sortedDoctors.map((doc, i) => {
+                        const color = DOCTOR_COLORS[i % DOCTOR_COLORS.length];
+                        const selected = selectedDoctorId === doc.id;
+                        const avgRating = Number(doc.avg_rating) || 0;
+                        const ratingCount = Number(doc.rating_count) || 0;
+                        const userRating = Number(doc.user_rating) || 0;
+                        const fee = Number(doc.consulting_fee) || 0;
+
+                        return (
+                          <div
+                            key={doc.id}
+                            onClick={() => setSelectedDoctorId(doc.id)}
+                            className={`w-full p-4 border-4 border-black text-left transition-all cursor-pointer ${
+                              selected
+                                ? "bg-[#9C27B0]/10 border-[#9C27B0] shadow-none translate-x-0.5 translate-y-0.5"
+                                : "bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-0.5 hover:translate-y-0.5"
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div
+                                className="w-12 h-12 border-2 border-black flex items-center justify-center text-white font-black text-base flex-shrink-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                style={{ backgroundColor: color }}
+                              >
+                                {doc.name.substring(0, 2).toUpperCase()}
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="font-black text-base uppercase tracking-tight text-black truncate">{doc.name}</p>
+                                  <span className="shrink-0 px-2.5 py-1 bg-black text-white border border-black text-xs font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                    ${fee} / session
+                                  </span>
+                                </div>
+                                <p className="text-[10px] font-bold text-black/50 truncate mb-2">{doc.email}</p>
+
+                                {/* Rating & Review Row */}
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-black/10">
+                                  <div className="flex items-center gap-1.5">
+                                    <Star size={14} className="fill-[#FBD000] text-black stroke-[1.5]" />
+                                    <span className="text-xs font-black text-black">{avgRating.toFixed(1)}</span>
+                                    <span className="text-[10px] font-bold text-black/40">({ratingCount})</span>
+                                    {ratingCount > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => handleFetchDoctorReviews(doc.id, e)}
+                                        className="text-[9px] font-black uppercase text-[#049CD8] hover:underline ml-1"
+                                      >
+                                        View Reviews
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Interactive Star Rating + Write Review (Disabled if self) */}
+                                  {user?.userId === doc.id ? (
+                                    <span className="px-2 py-0.5 bg-black/10 border border-black text-[9px] font-black uppercase text-black/60">
+                                      Your Profile
+                                    </span>
+                                  ) : (
+                                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                      <div className="flex items-center gap-1 bg-muted px-2 py-1 border border-black">
+                                        <span className="text-[9px] font-black uppercase text-black/60 mr-1">Rate:</span>
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                          <button
+                                            key={star}
+                                            type="button"
+                                            onClick={(e) => handleRateDoctor(e, doc.id, star)}
+                                            className="hover:scale-125 transition-transform"
+                                            title={`Rate ${star} stars`}
+                                          >
+                                            <Star
+                                              size={14}
+                                              className={
+                                                star <= (userRating || Math.round(avgRating))
+                                                  ? "fill-[#FBD000] text-black stroke-[1.5]"
+                                                  : "text-black/30"
+                                              }
+                                            />
+                                          </button>
+                                        ))}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => handleOpenRatingModal(doc, e)}
+                                        className="px-2 py-1 bg-accent text-black border border-black text-[9px] font-black uppercase hover:bg-black hover:text-white transition-colors"
+                                      >
+                                        + Review
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <p className={`font-black text-sm uppercase tracking-tight ${selected ? "text-white" : "text-black"}`}>{doc.name}</p>
-                            <p className={`text-[10px] font-bold uppercase ${selected ? "text-white/70" : "text-black/50"}`}>{doc.email}</p>
-                          </div>
-                          {selected && <Check size={18} className="ml-auto text-white" />}
-                        </button>
-                      );
-                    })
+                        );
+                      })}
+                    </div>
                   )}
+
                   {requestError && (
                     <p className="text-[11px] font-black text-[#E52521] uppercase">{requestError}</p>
                   )}
@@ -581,6 +799,146 @@ export default function ParentDashboard({ onStartTest }: { onStartTest?: () => v
                     {t("pd_send_request")}
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── WRITE RATING & OPTIONAL REVIEW MODAL ── */}
+      <AnimatePresence>
+        {ratingDoctorId && (
+          <>
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => setRatingDoctorId(null)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="fixed inset-0 flex items-center justify-center z-50 p-4"
+            >
+              <div className="w-full max-w-md bg-white border-4 border-black shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] p-6">
+                <div className="flex items-center justify-between mb-4 pb-2 border-b-2 border-black">
+                  <h3 className="font-black text-lg uppercase tracking-tight text-black flex items-center gap-2">
+                    <Star className="text-[#FBD000] fill-[#FBD000]" size={18} /> Rate & Review Doctor
+                  </h3>
+                  <button onClick={() => setRatingDoctorId(null)} className="text-black"><X size={18} /></button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-black/60 block mb-1">
+                      Select Rating (1 to 5 Stars) *
+                    </label>
+                    <div className="flex items-center gap-2 bg-muted p-3 border-2 border-black justify-center">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setSelectedStars(star)}
+                          className="hover:scale-125 transition-transform p-1"
+                        >
+                          <Star
+                            size={26}
+                            className={
+                              star <= selectedStars
+                                ? "fill-[#FBD000] text-black stroke-[1.5]"
+                                : "text-black/20"
+                            }
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-black/60 block mb-1">
+                      Written Review (Optional)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                      placeholder="Share your experience with this doctor (optional)..."
+                      className="w-full p-3 border-2 border-black bg-muted text-xs focus:bg-white focus:outline-none resize-none font-medium"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setRatingDoctorId(null)}
+                      className="flex-1 py-3 bg-muted border-2 border-black font-black uppercase text-xs tracking-wider"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveRatingAndReview}
+                      disabled={ratingSubmitting}
+                      className="flex-1 py-3 bg-primary text-white border-2 border-black font-black uppercase text-xs tracking-wider shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      {ratingSubmitting ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
+                      Submit Review
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── VIEW DOCTOR REVIEWS MODAL ── */}
+      <AnimatePresence>
+        {viewingReviewsDoctorId && (
+          <>
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => setViewingReviewsDoctorId(null)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="fixed inset-0 flex items-center justify-center z-50 p-4"
+            >
+              <div className="w-full max-w-lg bg-white border-4 border-black shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] p-6">
+                <div className="flex items-center justify-between mb-4 pb-2 border-b-2 border-black">
+                  <h3 className="font-black text-lg uppercase tracking-tight text-black flex items-center gap-2">
+                    <MessageSquare className="text-primary" size={18} /> Patient Reviews
+                  </h3>
+                  <button onClick={() => setViewingReviewsDoctorId(null)} className="text-black"><X size={18} /></button>
+                </div>
+
+                {loadingReviews ? (
+                  <div className="py-8 flex justify-center"><RefreshCw size={20} className="animate-spin text-primary" /></div>
+                ) : doctorReviewsList.length === 0 ? (
+                  <p className="text-xs font-black uppercase text-black/40 italic py-6 text-center">No reviews submitted yet.</p>
+                ) : (
+                  <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                    {doctorReviewsList.map((rev) => (
+                      <div key={rev.id} className="border-2 border-black p-3 bg-muted/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="font-black text-xs uppercase text-black">{rev.reviewer_name}</span>
+                          <div className="flex items-center text-[#FBD000]">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                size={12}
+                                className={star <= rev.rating ? "fill-[#FBD000] text-black stroke-[1]" : "text-black/20"}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        {rev.review ? (
+                          <p className="text-xs text-black/80 italic font-medium">&quot;{rev.review}&quot;</p>
+                        ) : (
+                          <p className="text-[10px] text-black/40 font-bold uppercase tracking-wider">Star rating submitted</p>
+                        )}
+                        <p className="text-[9px] text-black/30 font-bold text-right mt-1">
+                          {new Date(rev.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </motion.div>
           </>
